@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter, Write};
 use crate::errors::MessageParseError;
+use crate::from_str_parts::from_str_parts;
 use crate::message_from_impl::message_from_impl;
-use crate::raw_message::RawMessage;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -13,26 +13,17 @@ pub enum CopyProtection {
 }
 
 message_from_impl!(engine CopyProtection);
-
-impl TryFrom<RawMessage> for CopyProtection {
-    type Error = MessageParseError;
-
-    fn try_from(raw_message: RawMessage) -> Result<Self, MessageParseError> {
-        if raw_message.message_pointer != super::pointers::MessagePointer::CopyProtection.into() {
-            return Err(MessageParseError::InvalidMessage);
-        }
-
-        let Some(value) = raw_message.value else {
-            return Err(MessageParseError::MissingValue);
-        };
-
-        match value.as_bytes() {
-            b"ok" => Ok(Self::Ok),
-            b"error" => Ok(Self::Error),
-            _ => Err(MessageParseError::ValueParseError),
+from_str_parts!(impl CopyProtection for parts {
+    for part in parts {
+        match part.trim().to_lowercase().as_str() {
+            "ok" => return Ok(Self::Ok),
+            "error" => return Ok(Self::Error),
+            _ => ()
         }
     }
-}
+
+    Err(MessageParseError::ValueParseError)
+});
 
 impl Display for CopyProtection {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
