@@ -2,19 +2,6 @@ use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use std::io;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum MessageParseErrorKind {
-    /// No message in the string was found.
-    NoMessage,
-    /// Required parameters are missing.
-    MissingParameters,
-    /// A required parameter could not be parsed.
-    ParameterParseError,
-    /// The required value of the message could not be parsed.
-    ValueParseError,
-}
-
 /// Something went wrong with parsing a message.
 ///
 /// Note that the parsing is very liberal and ignores errors unless they're critical.
@@ -48,12 +35,25 @@ impl Display for MessageParseError {
 
 impl Error for MessageParseError {}
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum MessageParseErrorKind {
+    /// No message in the string was found.
+    NoMessage,
+    /// Required parameters are missing.
+    MissingParameters,
+    /// A required parameter could not be parsed.
+    ParameterParseError,
+    /// The required value of the message could not be parsed.
+    ValueParseError,
+}
+
 #[derive(Debug)]
 /// Reading a message from the engine failed.
 pub enum ReadError {
     /// Reading failed due to an I/O error.
     Io(io::Error),
-    /// Reading succeeded but parsing to a [`engine::Message`](crate::engine::Message) failed.
+    /// Reading succeeded but parsing to an [`EngineMessage`](crate::EngineMessage) failed.
     Parse {
         error: MessageParseError,
         /// The erroneous string. Includes the newline character (`\n`).

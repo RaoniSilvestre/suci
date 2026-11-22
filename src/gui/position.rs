@@ -1,22 +1,21 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use super::pointers::PositionParameterPointer;
 use crate::errors::MessageParseError;
-use crate::gui::pointers::PositionParameterPointer;
 use crate::{MessageParseErrorKind, OptionReplaceIf, parsing, uci_moves};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
 use std::borrow::Cow;
 
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Changes the position to analyze.
 ///
 /// Returns an error when parsing if neither `startpos` nor `fen` parameters are present.
 /// If both are present, the first one takes precedence (because Stockfish and Dragon do it like that).
 ///
 /// <https://backscattering.de/chess/uci/#gui-position>
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Position<'a> {
     StartPos {
         moves: Cow<'a, [UciMove]>,
@@ -28,6 +27,8 @@ pub enum Position<'a> {
 }
 
 impl Position<'_> {
+    pub(crate) const NAME: &'static str = "position";
+
     /// Calls [`Cow::into_owned`] on each [`Cow`] field.
     /// The resulting value has a `'static` lifetime.
     #[must_use]
@@ -42,42 +43,63 @@ impl Position<'_> {
             },
         }
     }
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        let mut startpos = false;
+        let mut fen = None::<Fen>;
+        let mut moves = Vec::new();
+        let parameter_fn = |parameter, _, value: &str, parts| {
+            match parameter {
+                PositionParameterPointer::Fen => {
+                    if !startpos {
+                        fen.replace_if(value.parse().ok());
+                    }
+                }
+                PositionParameterPointer::Moves => {
+                    let parsed = uci_moves::from_str(value);
+
+                    if !parsed.is_empty() {
+                        moves = parsed;
+                    }
+                }
+                PositionParameterPointer::StartPos => {
+                    if fen.is_none() {
+                        startpos = true;
+                    }
+                }
+            }
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        if let Some(fen) = fen {
+            Ok(Self::Fen {
+                fen: Cow::Owned(fen),
+                moves: Cow::Owned(moves),
+            })
+        } else if startpos {
+            Ok(Self::StartPos {
+                moves: Cow::Owned(moves),
+            })
+        } else {
+            Err(MessageParseError {
+                expected: "startpos",
+                kind: MessageParseErrorKind::MissingParameters,
+            })
+        }
+    }
 }
 
-impl_message!(Position<'_>);
-message_from_impl!(gui Position<'a>);
-from_str_parts!(impl Position<'_> for parts -> Result {
-    let mut startpos = false;
-    let mut fen = None::<Fen>;
-    let mut moves = Vec::new();
-    let parameter_fn = |parameter, _, value: &str, parts| { match parameter {
-        PositionParameterPointer::Fen => if !startpos { fen.replace_if(value.parse().ok()); },
-        PositionParameterPointer::Moves => {
-            let parsed = uci_moves::from_str(value);
+impl FromStr for Position<'_> {
+    type Err = MessageParseError;
 
-            if !parsed.is_empty() {
-                moves = parsed;
-            }
-        },
-        PositionParameterPointer::StartPos => if fen.is_none() {
-            startpos = true;
-        },
-    } Some(parts) };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    if let Some(fen) = fen {
-        Ok(Self::Fen { fen: Cow::Owned(fen), moves: Cow::Owned(moves) })
-    } else if startpos {
-        Ok(Self::StartPos { moves: Cow::Owned(moves) })
-    } else {
-        Err(MessageParseError {
-            expected: "startpos",
-            kind: MessageParseErrorKind::MissingParameters
-        })
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
     }
-});
+}
 
 impl Display for Position<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -108,12 +130,9 @@ impl Display for Position<'_> {
 
 #[cfg(test)]
 mod tests {
+    use super::Position;
     use crate::MessageParseErrorKind;
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
     use crate::errors::MessageParseError;
-    use crate::gui::Position;
     use shakmaty::fen::Fen;
     use shakmaty::uci::UciMove;
     use std::borrow::Cow;
@@ -128,11 +147,10 @@ mod tests {
             moves: Cow::Borrowed(&moves),
         };
 
-        assert_message_to_from_str!(
-            gui
-            repr,
-            "position startpos moves d2d4 d7d5"
-        );
+        let s = "position startpos moves d2d4 d7d5";
+
+        assert_eq!(repr.to_string(), s);
+        assert_eq!(s.parse::<Position>(), Ok(repr));
 
         let moves = [
             UciMove::from_ascii(b"d2d4").unwrap(),
@@ -142,16 +160,11 @@ mod tests {
             moves: Cow::Borrowed(&moves),
         };
 
-        assert_from_str_message!(
-            gui
-            "position    startpos fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves \t d2d4 d7d5",
+        assert_eq!(
+            "position    startpos fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves \t d2d4 d7d5".parse::<Position>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            gui
-            m,
-            "position startpos moves d2d4 d7d5"
-        );
+        assert_eq!(m.to_string(), "position startpos moves d2d4 d7d5");
     }
 
     #[test]
@@ -165,11 +178,10 @@ mod tests {
             moves: Cow::Borrowed(&moves),
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "position fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves b1c3"
-        );
+        let s = "position fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves b1c3";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Position>(), Ok(m));
 
         let fen =
             Fen::from_ascii(b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5")
@@ -180,14 +192,12 @@ mod tests {
             moves: Cow::Borrowed(&moves),
         };
 
-        assert_from_str_message!(
-            gui
-            "position fen   rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 startpos \t moves b1c3",
+        assert_eq!(
+            "position fen   rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 startpos \t moves b1c3".parse::<Position>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            gui
-            m,
+        assert_eq!(
+            m.to_string(),
             "position fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves b1c3"
         );
     }
@@ -200,26 +210,20 @@ mod tests {
             moves: Cow::Borrowed(&moves),
         };
 
-        assert_from_str_message!(
-            gui
-            "position startpos moves d2d4 this ain't a move buddy pal",
+        assert_eq!(
+            "position startpos moves d2d4 this ain't a move buddy pal".parse::<Position>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            gui
-            m,
-            "position startpos moves d2d4"
-        );
+        assert_eq!(m.to_string(), "position startpos moves d2d4");
     }
 
     #[test]
     fn parse_error() {
-        assert_from_str_message!(
-            gui
-            "position moves e2e4",
-            Err::<Position, MessageParseError>(MessageParseError {
+        assert_eq!(
+            "position moves e2e4".parse::<Position>(),
+            Err(MessageParseError {
                 expected: "startpos",
-                kind: MessageParseErrorKind::MissingParameters
+                kind: MessageParseErrorKind::MissingParameters,
             })
         );
     }

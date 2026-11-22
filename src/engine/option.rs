@@ -1,72 +1,141 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::engine::pointers::OptionParameterPointer;
+use super::pointers::OptionParameterPointer;
 use crate::errors::MessageParseError;
 use crate::{MessageParseErrorKind, OptionReplaceIf, parsing};
 use core::fmt::{Display, Formatter};
-use core::str::FromStr;
+use core::str::{FromStr, Split};
 use std::borrow::Cow;
 
-enum BlankOptionType {
-    Check,
-    Spin,
-    Combo,
-    Button,
-    String,
+/// Engine configuration option.
+///
+/// Sent after [`Uci`](crate::gui::Uci).
+///
+/// <https://backscattering.de/chess/uci/#engine-option>
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct EngineOption<'a> {
+    pub name: Cow<'a, str>,
+    pub r#type: EngineOptionType<'a>,
 }
 
-impl FromStr for BlankOptionType {
-    type Err = ();
+impl EngineOption<'_> {
+    pub(crate) const NAME: &'static str = "option";
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "check" => Ok(Self::Check),
-            "spin" => Ok(Self::Spin),
-            "combo" => Ok(Self::Combo),
-            "button" => Ok(Self::Button),
-            "string" => Ok(Self::String),
-            _ => Err(()),
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        let mut name = None::<String>;
+        let mut r#type = None::<BlankOptionType>;
+        let mut default = None::<String>;
+        let mut min = None::<i64>;
+        let mut max = None::<i64>;
+        let mut var = Vec::new();
+        let parameter_fn = |parameter, _, value: &str, parts| {
+            match parameter {
+                OptionParameterPointer::Name => name = Some(value.to_string()),
+                OptionParameterPointer::Type => r#type.replace_if(value.parse().ok()),
+                OptionParameterPointer::Default => default = Some(value.to_string()),
+                OptionParameterPointer::Min => min.replace_if(value.parse().ok()),
+                OptionParameterPointer::Max => max.replace_if(value.parse().ok()),
+                OptionParameterPointer::Var => var.push(Cow::Owned(value.to_string())),
+            }
+
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        let Some(name) = name else {
+            return Err(MessageParseError {
+                expected: "name",
+                kind: MessageParseErrorKind::MissingParameters,
+            });
+        };
+
+        let Some(r#type) = r#type else {
+            return Err(MessageParseError {
+                expected: "a type parameter; check, spin, combo, button or string",
+                kind: MessageParseErrorKind::MissingParameters,
+            });
+        };
+
+        let name = Cow::Owned(name);
+
+        match r#type {
+            BlankOptionType::Check => Ok(Self {
+                name,
+                r#type: EngineOptionType::Check {
+                    default: default.and_then(|d| d.parse().ok()),
+                },
+            }),
+            BlankOptionType::Spin => Ok(Self {
+                name,
+                r#type: EngineOptionType::Spin {
+                    default: default.and_then(|d| d.parse().ok()),
+                    min,
+                    max,
+                },
+            }),
+            BlankOptionType::Combo => Ok(Self {
+                name,
+                r#type: EngineOptionType::Combo {
+                    default: default.map(Cow::Owned),
+                    var: Cow::Owned(var),
+                },
+            }),
+            BlankOptionType::Button => Ok(Self {
+                name,
+                r#type: EngineOptionType::Button,
+            }),
+            BlankOptionType::String => Ok(Self {
+                name,
+                r#type: EngineOptionType::String {
+                    default: default.map(Cow::Owned),
+                },
+            }),
         }
     }
 }
 
-impl Display for BlankOptionType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
-            Self::Check => "check",
-            Self::Spin => "spin",
-            Self::Combo => "combo",
-            Self::Button => "button",
-            Self::String => "string",
-        })
+impl FromStr for EngineOption<'_> {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
     }
 }
 
-/// Type of an engine [`Option`].
+impl Display for EngineOption<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "option name {} {}", self.name, self.r#type)
+    }
+}
+
+/// Type of an engine [`EngineOption`].
 ///
 /// <https://backscattering.de/chess/uci/#engine-option-type>
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum OptionType<'a> {
+pub enum EngineOptionType<'a> {
     /// <https://backscattering.de/chess/uci/#engine-option-type-check>
     Check {
         /// <https://backscattering.de/chess/uci/#engine-option-default>
-        default: StdOption<bool>,
+        default: Option<bool>,
     },
     /// <https://backscattering.de/chess/uci/#engine-option-type-spin>
     Spin {
         /// <https://backscattering.de/chess/uci/#engine-option-default>
-        default: StdOption<i64>,
+        default: Option<i64>,
         /// <https://backscattering.de/chess/uci/#engine-option-min>
-        min: StdOption<i64>,
+        min: Option<i64>,
         /// <https://backscattering.de/chess/uci/#engine-option-max>
-        max: StdOption<i64>,
+        max: Option<i64>,
     },
     /// <https://backscattering.de/chess/uci/#engine-option-type-combo>
     Combo {
         /// <https://backscattering.de/chess/uci/#engine-option-default>
-        default: StdOption<Cow<'a, str>>,
+        default: Option<Cow<'a, str>>,
         /// <https://backscattering.de/chess/uci/#engine-option-var>
         var: Cow<'a, [Cow<'a, str>]>,
     },
@@ -75,19 +144,19 @@ pub enum OptionType<'a> {
     /// <https://backscattering.de/chess/uci/#engine-option-type-string>
     String {
         /// <https://backscattering.de/chess/uci/#engine-option-default>
-        default: StdOption<Cow<'a, str>>,
+        default: Option<Cow<'a, str>>,
     },
 }
 
-impl OptionType<'_> {
+impl EngineOptionType<'_> {
     /// Calls [`Cow::into_owned`] on each [`Cow`] field.
     /// The resulting value has a `'static` lifetime.
     #[must_use]
-    pub fn into_owned(self) -> OptionType<'static> {
+    pub fn into_owned(self) -> EngineOptionType<'static> {
         match self {
-            Self::Check { default } => OptionType::Check { default },
-            Self::Spin { default, min, max } => OptionType::Spin { default, min, max },
-            Self::Combo { default, var } => OptionType::Combo {
+            Self::Check { default } => EngineOptionType::Check { default },
+            Self::Spin { default, min, max } => EngineOptionType::Spin { default, min, max },
+            Self::Combo { default, var } => EngineOptionType::Combo {
                 default: default.map(Cow::into_owned).map(Cow::Owned),
                 var: Cow::Owned(
                     var.into_owned()
@@ -97,15 +166,15 @@ impl OptionType<'_> {
                         .collect::<Vec<_>>(),
                 ),
             },
-            Self::Button => OptionType::Button,
-            Self::String { default } => OptionType::String {
+            Self::Button => EngineOptionType::Button,
+            Self::String { default } => EngineOptionType::String {
                 default: default.map(Cow::into_owned).map(Cow::Owned),
             },
         }
     }
 }
 
-impl Display for OptionType<'_> {
+impl Display for EngineOptionType<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("type ")?;
 
@@ -157,129 +226,83 @@ impl Display for OptionType<'_> {
     }
 }
 
-type StdOption<T> = core::option::Option<T>;
-
-/// Engine configuration option.
-///
-/// Sent after [`Uci`](crate::gui::Uci).
-///
-/// <https://backscattering.de/chess/uci/#engine-option>
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Option<'a> {
-    pub name: Cow<'a, str>,
-    pub r#type: OptionType<'a>,
+enum BlankOptionType {
+    Check,
+    Spin,
+    Combo,
+    Button,
+    String,
 }
 
-impl_message!(Option<'_>);
-message_from_impl!(engine Option<'a>);
-from_str_parts!(impl Option<'_> for parts -> Result {
-    let mut name = None::<String>;
-    let mut r#type = None::<BlankOptionType>;
-    let mut default = None::<String>;
-    let mut min = None::<i64>;
-    let mut max = None::<i64>;
-    let mut var = Vec::new();
-    let parameter_fn = |parameter, _, value: &str, parts| {
-        match parameter {
-            OptionParameterPointer::Name => name = Some(value.to_string()),
-            OptionParameterPointer::Type => r#type.replace_if(value.parse().ok()),
-            OptionParameterPointer::Default => default = Some(value.to_string()),
-            OptionParameterPointer::Min => min.replace_if(value.parse().ok()),
-            OptionParameterPointer::Max => max.replace_if(value.parse().ok()),
-            OptionParameterPointer::Var => var.push(Cow::Owned(value.to_string())),
+impl FromStr for BlankOptionType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "check" => Ok(Self::Check),
+            "spin" => Ok(Self::Spin),
+            "combo" => Ok(Self::Combo),
+            "button" => Ok(Self::Button),
+            "string" => Ok(Self::String),
+            _ => Err(()),
         }
-
-        Some(parts)
-    };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    let Some(name) = name else {
-        return Err(MessageParseError {
-            expected: "name",
-            kind: MessageParseErrorKind::MissingParameters
-        });
-    };
-
-    let Some(r#type) = r#type else {
-        return Err(MessageParseError {
-            expected: "a type parameter; check, spin, combo, button or string",
-            kind: MessageParseErrorKind::MissingParameters
-        });
-    };
-
-    let name = Cow::Owned(name);
-
-    match r#type {
-        BlankOptionType::Check => {
-            Ok(Self { name, r#type: OptionType::Check { default: default.and_then(|d| d.parse().ok()) } })
-        },
-        BlankOptionType::Spin => {
-            Ok(Self { name, r#type: OptionType::Spin {
-                default: default.and_then(|d| d.parse().ok()),
-                min,
-                max
-            } })
-        },
-        BlankOptionType::Combo => {
-            Ok(Self { name, r#type: OptionType::Combo { default: default.map(Cow::Owned), var: Cow::Owned(var) } })
-        },
-        BlankOptionType::Button => Ok(Self { name, r#type: OptionType::Button }),
-        BlankOptionType::String => {
-            Ok(Self { name, r#type: OptionType::String { default: default.map(Cow::Owned) } })
-        },
     }
-});
+}
 
-impl Display for Option<'_> {
+impl Display for BlankOptionType {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "option name {} {}", self.name, self.r#type)
+        f.write_str(match self {
+            Self::Check => "check",
+            Self::Spin => "spin",
+            Self::Combo => "combo",
+            Self::Button => "button",
+            Self::String => "string",
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Option;
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
-    use crate::engine::OptionType;
+    use super::{EngineOption, EngineOptionType};
     use std::borrow::Cow;
 
     #[test]
     fn to_from_str_min_max() {
-        let m = Option {
+        let m = EngineOption {
             name: Cow::Borrowed("Skill Level"),
-            r#type: OptionType::Spin {
+            r#type: EngineOptionType::Spin {
                 default: Some(20),
                 min: Some(-10),
                 max: Some(20),
             },
         };
 
-        assert_from_str_message!(
-            engine
-            "option name Skill Level type spin type INVALID default 20 min -10 max 20",
+        assert_eq!(
+            "option name Skill Level type spin type INVALID default 20 min -10 max 20"
+                .parse::<EngineOption>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(engine m, "option name Skill Level type spin default 20 min -10 max 20");
+        assert_eq!(
+            m.to_string(),
+            "option name Skill Level type spin default 20 min -10 max 20"
+        );
 
-        let m = Option {
+        let m = EngineOption {
             name: Cow::Borrowed("Personality"),
-            r#type: OptionType::String {
+            r#type: EngineOptionType::String {
                 default: Some(Cow::Borrowed("Aggressive")),
             },
         };
 
-        assert_from_str_message!(
-            engine
-            "option name Personality type spin type string default Aggressive",
+        assert_eq!(
+            "option name Personality type spin type string default Aggressive"
+                .parse::<EngineOption>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(engine m, "option name Personality type string default Aggressive");
+        assert_eq!(
+            m.to_string(),
+            "option name Personality type string default Aggressive"
+        );
     }
 
     #[test]
@@ -292,9 +315,9 @@ mod tests {
             Cow::Borrowed("Endgame"),
         ];
 
-        let m = Option {
+        let m = EngineOption {
             name: Cow::Borrowed("K Personality"),
-            r#type: OptionType::Combo {
+            r#type: EngineOptionType::Combo {
                 default: Some(Cow::Borrowed("Default p")),
                 var: Cow::Borrowed(var),
             },
@@ -303,29 +326,23 @@ mod tests {
         // Output has a different order, which is fine, but can't use the same string.
         let str_out = "option name K Personality type combo default Default p var Foo bar fighter var Aggressive p var Defensive p var Positional var Endgame";
 
-        assert_from_str_message!(
-            engine
-            str_in,
-            Ok(m.clone())
-        );
-        assert_message_to_str!(engine m, str_out);
+        assert_eq!(str_in.parse::<EngineOption>(), Ok(m.clone()));
+        assert_eq!(m.to_string(), str_out);
     }
 
     #[test]
     fn button() {
-        let m = Option {
+        let m = EngineOption {
             name: "Execute   order\t 66".into(),
-            r#type: OptionType::Button,
+            r#type: EngineOptionType::Button,
         };
 
-        assert_from_str_message!(
-            engine
-            "option name   Execute   order\t 66   type button",
+        assert_eq!(
+            "option name   Execute   order\t 66   type button".parse::<EngineOption>(),
             Ok(m.clone())
         );
-        assert_message_to_from_str!(
-            engine
-            m,
+        assert_eq!(
+            m.to_string(),
             "option name Execute   order\t 66 type button"
         );
     }

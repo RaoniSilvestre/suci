@@ -1,8 +1,7 @@
-use super::{pointers, traits};
-use crate::MessageParseErrorKind;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::errors::MessageParseError;
+use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -10,26 +9,37 @@ use core::fmt::{Display, Formatter};
 /// Tells the engine to be in debug mode.
 ///
 /// <https://backscattering.de/chess/uci/#gui-debug>
-pub struct Debug(pub bool);
+pub struct GuiDebug(pub bool);
 
-impl_message!(Debug);
-message_from_impl!(gui Debug);
-from_str_parts!(impl Debug for parts -> Result {
-    for part in parts {
-        match part.trim() {
-            "on" => return Ok(Self(true)),
-            "off" => return Ok(Self(false)),
-            _ => ()
+impl GuiDebug {
+    pub(crate) const NAME: &'static str = "debug";
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        for part in parts {
+            match part.trim() {
+                "on" => return Ok(Self(true)),
+                "off" => return Ok(Self(false)),
+                _ => (),
+            }
         }
+
+        Err(MessageParseError {
+            expected: "on or off",
+            kind: MessageParseErrorKind::ValueParseError,
+        })
     }
+}
 
-    Err(MessageParseError {
-        expected: "on or off",
-        kind: MessageParseErrorKind::ValueParseError
-    })
-});
+impl FromStr for GuiDebug {
+    type Err = MessageParseError;
 
-impl Display for Debug {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
+    }
+}
+
+impl Display for GuiDebug {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("debug ")?;
 
@@ -43,26 +53,34 @@ impl Display for Debug {
 
 #[cfg(test)]
 mod tests {
-    use super::Debug;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str};
-    use crate::{MessageParseError, MessageParseErrorKind};
+    use super::GuiDebug;
+    use crate::MessageParseErrorKind;
+    use crate::errors::MessageParseError;
 
     #[test]
     fn to_from_str_on() {
-        assert_message_to_from_str!(gui Debug(true), "debug on");
+        assert_eq!(GuiDebug(true).to_string(), "debug on");
+        assert_eq!("debug on".parse::<GuiDebug>(), Ok(GuiDebug(true)));
     }
 
     #[test]
     fn to_from_str_off() {
-        assert_message_to_from_str!(gui Debug(false), "debug off");
-        assert_from_str_message!(gui "debug blah    off asffd\n", Ok(Debug(false)));
+        assert_eq!(GuiDebug(false).to_string(), "debug off");
+        assert_eq!("debug off".parse::<GuiDebug>(), Ok(GuiDebug(false)));
+        assert_eq!(
+            "debug blah    off asffd\n".parse::<GuiDebug>(),
+            Ok(GuiDebug(false))
+        );
     }
 
     #[test]
     fn parse_error() {
-        assert_from_str_message!(gui "debug why   \t are you \nhere? 🤨", Err::<Debug, MessageParseError>(MessageParseError {
-            expected: "on or off",
-            kind: MessageParseErrorKind::ValueParseError
-        }));
+        assert_eq!(
+            "debug why   \t are you \nhere? 🤨".parse::<GuiDebug>(),
+            Err(MessageParseError {
+                expected: "on or off",
+                kind: MessageParseErrorKind::ValueParseError,
+            })
+        );
     }
 }

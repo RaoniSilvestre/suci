@@ -1,11 +1,315 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message};
-use crate::engine::pointers::InfoParameterPointer;
+use super::pointers::InfoParameterPointer;
+use crate::errors::MessageParseError;
 use crate::{OptionReplaceIf, parsing, uci_moves};
 use core::fmt::{Display, Formatter, Write};
+use core::str::{FromStr, Split};
 use shakmaty::Color;
 use shakmaty::uci::UciMove;
 use std::borrow::Cow;
+
+/// Information about the engine's calculation.
+///
+/// Sent (probably multiple times) after [`Go`](crate::gui::Go).
+///
+/// <https://backscattering.de/chess/uci/#engine-info>
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Info<'a> {
+    /// <https://backscattering.de/chess/uci/#engine-info-depth>
+    pub depth: Option<Depth>,
+    /// <https://backscattering.de/chess/uci/#engine-info-time>
+    pub time: Option<usize>,
+    /// <https://backscattering.de/chess/uci/#engine-info-nodes>
+    pub nodes: Option<usize>,
+    /// Primary variation.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-pv>
+    pub pv: Cow<'a, [UciMove]>,
+    /// Multi primary variation.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-multipv>
+    pub multi_pv: Option<usize>,
+    /// <https://backscattering.de/chess/uci/#engine-info-score>
+    pub score: Option<ScoreWithBound>,
+    /// Current move.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-currmove>
+    pub curr_move: Option<UciMove>,
+    /// Current move number.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-currmovenumber>
+    pub curr_move_number: Option<usize>,
+    /// <https://backscattering.de/chess/uci/#engine-info-hashfull>
+    pub hash_full: Option<usize>,
+    /// Nodes per second.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-nps>
+    pub nps: Option<usize>,
+    /// Tablebase hits.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-tbhits>
+    pub tb_hits: Option<usize>,
+    /// Shredderbase hits.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-info-sbhits>
+    pub sb_hits: Option<usize>,
+    /// <https://backscattering.de/chess/uci/#engine-info-cpuload>
+    pub cpu_load: Option<usize>,
+    /// <https://backscattering.de/chess/uci/#engine-info-string>
+    pub string: Option<Cow<'a, str>>,
+    /// <https://backscattering.de/chess/uci/#engine-info-refutation>
+    pub refutation: Option<Refutation<'a>>,
+    /// <https://backscattering.de/chess/uci/#engine-info-currline>
+    pub curr_line: Option<CurrLine<'a>>,
+}
+
+impl Info<'_> {
+    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
+    /// The resulting value has a `'static` lifetime.
+    #[must_use]
+    pub fn into_owned(self) -> Info<'static> {
+        let Info {
+            depth,
+            time,
+            nodes,
+            pv,
+            multi_pv,
+            score,
+            curr_move,
+            curr_move_number,
+            hash_full,
+            nps,
+            tb_hits,
+            sb_hits,
+            cpu_load,
+            string,
+            refutation,
+            curr_line,
+        } = self;
+
+        Info {
+            depth,
+            time,
+            nodes,
+            pv: Cow::Owned(pv.into_owned()),
+            multi_pv,
+            score,
+            curr_move,
+            curr_move_number,
+            hash_full,
+            nps,
+            tb_hits,
+            sb_hits,
+            cpu_load,
+            string: string.map(Cow::into_owned).map(Cow::Owned),
+            refutation: refutation.map(Refutation::into_owned),
+            curr_line: curr_line.map(CurrLine::into_owned),
+        }
+    }
+}
+
+impl Info<'_> {
+    pub(crate) const NAME: &'static str = "info";
+
+    pub(crate) fn from_str_parts<'p>(parts: Split<'p, char>) -> Self {
+        let mut this = Self::default();
+        // Need to handle depth like this in case the seldepth argument comes before the depth argument.
+        let mut depth = None::<usize>;
+        let mut seldepth = None::<usize>;
+        let mut pv = Vec::new();
+        let mut string = String::new();
+
+        let parameter_fn = |parameter,
+                            next_parameter: Option<InfoParameterPointer>,
+                            value: &str,
+                            parts: core::str::Split<'p, char>| {
+            match parameter {
+                InfoParameterPointer::Depth => depth.replace_if(value.parse().ok()),
+                InfoParameterPointer::SelDepth => seldepth.replace_if(value.parse().ok()),
+                InfoParameterPointer::Time => this.time.replace_if(value.parse().ok()),
+                InfoParameterPointer::Nodes => this.nodes.replace_if(value.parse().ok()),
+                InfoParameterPointer::Pv => {
+                    let parsed = uci_moves::from_str(value);
+
+                    if !parsed.is_empty() {
+                        pv = parsed;
+                    }
+                }
+                InfoParameterPointer::MultiPv => this.multi_pv.replace_if(value.parse().ok()),
+                InfoParameterPointer::Score => {
+                    this.score.replace_if(ScoreWithBound::from_str(value));
+                }
+                InfoParameterPointer::CurrMove => this.curr_move.replace_if(value.parse().ok()),
+                InfoParameterPointer::CurrMoveNumber => {
+                    this.curr_move_number.replace_if(value.parse().ok());
+                }
+                InfoParameterPointer::HashFull => this.hash_full.replace_if(value.parse().ok()),
+                InfoParameterPointer::Nps => this.nps.replace_if(value.parse().ok()),
+                InfoParameterPointer::TbHits => this.tb_hits.replace_if(value.parse().ok()),
+                InfoParameterPointer::SbHits => this.sb_hits.replace_if(value.parse().ok()),
+                InfoParameterPointer::CpuLoad => this.cpu_load.replace_if(value.parse().ok()),
+                InfoParameterPointer::String => {
+                    string = value.to_string();
+                    let size_hint = parts.size_hint();
+                    string.reserve(size_hint.1.unwrap_or(size_hint.0).saturating_mul(20));
+
+                    if let Some(next_parameter) = next_parameter {
+                        string.push_str(next_parameter.as_str_spaced());
+                    }
+
+                    let mut first = true;
+
+                    for part in parts {
+                        if first {
+                            first = false;
+                        } else {
+                            string.push(' ');
+                        }
+
+                        string.push_str(part);
+                    }
+
+                    return None;
+                }
+                InfoParameterPointer::Refutation => {
+                    this.refutation.replace_if(Refutation::from_str(value));
+                }
+                InfoParameterPointer::CurrLine => {
+                    this.curr_line.replace_if(CurrLine::from_str(value));
+                }
+            }
+
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        this.pv = Cow::Owned(pv);
+
+        if let Some(depth) = depth {
+            this.depth = Some(Depth { depth, seldepth });
+        }
+
+        if !string.is_empty() {
+            this.string = Some(Cow::Owned(string));
+        }
+
+        this
+    }
+}
+
+impl FromStr for Info<'_> {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Ok(Self::from_str_parts(parts))
+    }
+}
+
+impl Display for Info<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("info")?;
+
+        if let Some(depth) = &self.depth {
+            write!(f, " depth {}", depth.depth)?;
+
+            if let Some(selective_search_depth) = depth.seldepth {
+                write!(f, " seldepth {selective_search_depth}")?;
+            }
+        }
+
+        if let Some(time) = self.time {
+            write!(f, " time {time}")?;
+        }
+
+        if let Some(nodes) = self.nodes {
+            write!(f, " nodes {nodes}")?;
+        }
+
+        if !self.pv.is_empty() {
+            f.write_str(" pv ")?;
+            uci_moves::fmt(&self.pv, f)?;
+        }
+
+        if let Some(multi_primary_variation) = self.multi_pv {
+            write!(f, " multipv {multi_primary_variation}")?;
+        }
+
+        if let Some(score) = &self.score {
+            f.write_str(" score")?;
+
+            match score.kind {
+                Score::Centipawns(centipawns) => write!(f, " cp {centipawns}")?,
+                Score::MateIn(mate_in) => write!(f, " mate {mate_in}")?,
+            }
+
+            match score.bound {
+                Some(ScoreBound::UpperBound) => {
+                    f.write_str(" upperbound")?;
+                }
+                Some(ScoreBound::LowerBound) => {
+                    f.write_str(" lowerbound")?;
+                }
+                None => {}
+            }
+        }
+
+        if let Some(current_move) = &self.curr_move {
+            write!(f, " currmove {current_move}")?;
+        }
+
+        if let Some(current_move_number) = self.curr_move_number {
+            write!(f, " currmovenumber {current_move_number}")?;
+        }
+
+        if let Some(hash_full) = self.hash_full {
+            write!(f, " hashfull {hash_full}")?;
+        }
+
+        if let Some(nodes_per_second) = self.nps {
+            write!(f, " nps {nodes_per_second}")?;
+        }
+
+        if let Some(table_base_hits) = self.tb_hits {
+            write!(f, " tbhits {table_base_hits}")?;
+        }
+
+        if let Some(shredder_base_hits) = self.sb_hits {
+            write!(f, " sbhits {shredder_base_hits}")?;
+        }
+
+        if let Some(cpu_load) = self.cpu_load {
+            write!(f, " cpuload {cpu_load}")?;
+        }
+
+        if let Some(refutation) = &self.refutation {
+            write!(f, " refutation {} ", refutation.refuted_move)?;
+            uci_moves::fmt(&refutation.refutation, f)?;
+        }
+
+        if let Some(current_line) = &self.curr_line {
+            f.write_str(" currline")?;
+
+            if let Some(used_cpu) = current_line.used_cpu {
+                f.write_char(' ')?;
+                f.write_str(&used_cpu.to_string())?;
+            }
+
+            if !current_line.line.is_empty() {
+                f.write_char(' ')?;
+                uci_moves::fmt(&current_line.line, f)?;
+            }
+        }
+
+        if let Some(string) = &self.string {
+            write!(f, " string {string}")?;
+        }
+
+        Ok(())
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -179,308 +483,9 @@ impl CurrLine<'static> {
     }
 }
 
-/// Information about the engine's calculation.
-///
-/// Sent (probably multiple times) after [`Go`](crate::gui::Go).
-///
-/// <https://backscattering.de/chess/uci/#engine-info>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Info<'a> {
-    /// <https://backscattering.de/chess/uci/#engine-info-depth>
-    pub depth: Option<Depth>,
-    /// <https://backscattering.de/chess/uci/#engine-info-time>
-    pub time: Option<usize>,
-    /// <https://backscattering.de/chess/uci/#engine-info-nodes>
-    pub nodes: Option<usize>,
-    /// Primary variation.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-pv>
-    pub pv: Cow<'a, [UciMove]>,
-    /// Multi primary variation.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-multipv>
-    pub multi_pv: Option<usize>,
-    /// <https://backscattering.de/chess/uci/#engine-info-score>
-    pub score: Option<ScoreWithBound>,
-    /// Current move.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-currmove>
-    pub curr_move: Option<UciMove>,
-    /// Current move number.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-currmovenumber>
-    pub curr_move_number: Option<usize>,
-    /// <https://backscattering.de/chess/uci/#engine-info-hashfull>
-    pub hash_full: Option<usize>,
-    /// Nodes per second.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-nps>
-    pub nps: Option<usize>,
-    /// Tablebase hits.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-tbhits>
-    pub tb_hits: Option<usize>,
-    /// Shredderbase hits.
-    ///
-    /// <https://backscattering.de/chess/uci/#engine-info-sbhits>
-    pub sb_hits: Option<usize>,
-    /// <https://backscattering.de/chess/uci/#engine-info-cpuload>
-    pub cpu_load: Option<usize>,
-    /// <https://backscattering.de/chess/uci/#engine-info-string>
-    pub string: Option<Cow<'a, str>>,
-    /// <https://backscattering.de/chess/uci/#engine-info-refutation>
-    pub refutation: Option<Refutation<'a>>,
-    /// <https://backscattering.de/chess/uci/#engine-info-currline>
-    pub curr_line: Option<CurrLine<'a>>,
-}
-
-impl Info<'_> {
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> Info<'static> {
-        let Info {
-            depth,
-            time,
-            nodes,
-            pv,
-            multi_pv,
-            score,
-            curr_move,
-            curr_move_number,
-            hash_full,
-            nps,
-            tb_hits,
-            sb_hits,
-            cpu_load,
-            string,
-            refutation,
-            curr_line,
-        } = self;
-
-        Info {
-            depth,
-            time,
-            nodes,
-            pv: Cow::Owned(pv.into_owned()),
-            multi_pv,
-            score,
-            curr_move,
-            curr_move_number,
-            hash_full,
-            nps,
-            tb_hits,
-            sb_hits,
-            cpu_load,
-            string: string.map(Cow::into_owned).map(Cow::Owned),
-            refutation: refutation.map(Refutation::into_owned),
-            curr_line: curr_line.map(CurrLine::into_owned),
-        }
-    }
-}
-
-impl<'a> From<Info<'a>> for crate::Message<'a> {
-    fn from(value: Info<'a>) -> Self {
-        Self::Engine(crate::engine::Message::Info(Box::new(value)))
-    }
-}
-
-impl<'a> From<Info<'a>> for crate::engine::Message<'a> {
-    fn from(value: Info<'a>) -> Self {
-        Self::Info(Box::new(value))
-    }
-}
-
-impl_message!(Info<'_>);
-from_str_parts!(impl Info<'_> for parts<'p> -> Self {
-    let mut this = Self::default();
-    // Need to handle depth like this in case the seldepth argument comes before the depth argument.
-    let mut depth = None::<usize>;
-    let mut seldepth = None::<usize>;
-    let mut pv = Vec::new();
-    let mut string = String::new();
-
-    let parameter_fn = |parameter, next_parameter: Option<InfoParameterPointer>, value: &str, parts: core::str::Split<'p, char>| {
-        match parameter {
-            InfoParameterPointer::Depth => depth.replace_if(value.parse().ok()),
-            InfoParameterPointer::SelDepth => seldepth.replace_if(value.parse().ok()),
-            InfoParameterPointer::Time => this.time.replace_if(value.parse().ok()),
-            InfoParameterPointer::Nodes => this.nodes.replace_if(value.parse().ok()),
-            InfoParameterPointer::PV => {
-                let parsed = uci_moves::from_str(value);
-
-                if !parsed.is_empty() {
-                    pv = parsed;
-                }
-            },
-            InfoParameterPointer::MultiPV => this.multi_pv.replace_if(value.parse().ok()),
-            InfoParameterPointer::Score => this.score.replace_if(ScoreWithBound::from_str(value)),
-            InfoParameterPointer::CurrMove => this.curr_move.replace_if(value.parse().ok()),
-            InfoParameterPointer::CurrMoveNumber => this.curr_move_number.replace_if(value.parse().ok()),
-            InfoParameterPointer::HashFull => this.hash_full.replace_if(value.parse().ok()),
-            InfoParameterPointer::Nps => this.nps.replace_if(value.parse().ok()),
-            InfoParameterPointer::TbHits => this.tb_hits.replace_if(value.parse().ok()),
-            InfoParameterPointer::SbHits => this.sb_hits.replace_if(value.parse().ok()),
-            InfoParameterPointer::CpuLoad => this.cpu_load.replace_if(value.parse().ok()),
-            InfoParameterPointer::String => {
-                string = value.to_string();
-                let size_hint = parts.size_hint();
-                string.reserve(size_hint.1.unwrap_or(size_hint.0).saturating_mul(20));
-
-                if let Some(next_parameter) = next_parameter {
-                    string.push_str(next_parameter.as_str_spaced());
-                }
-
-                let mut first = true;
-
-                for part in parts {
-                    if first {
-                        first = false;
-                    } else {
-                        string.push(' ');
-                    }
-
-                    string.push_str(part);
-                }
-
-                return None;
-            },
-            InfoParameterPointer::Refutation => this.refutation.replace_if(Refutation::from_str(value)),
-            InfoParameterPointer::CurrLine => this.curr_line.replace_if(CurrLine::from_str(value)),
-        }
-
-        Some(parts)
-    };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    this.pv = Cow::Owned(pv);
-
-    if let Some(depth) = depth {
-        this.depth = Some(Depth {
-            depth,
-            seldepth
-        });
-    }
-
-    if !string.is_empty() {
-        this.string = Some(Cow::Owned(string));
-    }
-
-    this
-});
-
-impl Display for Info<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.write_str("info")?;
-
-        if let Some(depth) = &self.depth {
-            write!(f, " depth {}", depth.depth)?;
-
-            if let Some(selective_search_depth) = depth.seldepth {
-                write!(f, " seldepth {selective_search_depth}")?;
-            }
-        }
-
-        if let Some(time) = self.time {
-            write!(f, " time {time}")?;
-        }
-
-        if let Some(nodes) = self.nodes {
-            write!(f, " nodes {nodes}")?;
-        }
-
-        if !self.pv.is_empty() {
-            f.write_str(" pv ")?;
-            uci_moves::fmt(&self.pv, f)?;
-        }
-
-        if let Some(multi_primary_variation) = self.multi_pv {
-            write!(f, " multipv {multi_primary_variation}")?;
-        }
-
-        if let Some(score) = &self.score {
-            f.write_str(" score")?;
-
-            match score.kind {
-                Score::Centipawns(centipawns) => write!(f, " cp {centipawns}")?,
-                Score::MateIn(mate_in) => write!(f, " mate {mate_in}")?,
-            }
-
-            match score.bound {
-                Some(ScoreBound::UpperBound) => {
-                    f.write_str(" upperbound")?;
-                }
-                Some(ScoreBound::LowerBound) => {
-                    f.write_str(" lowerbound")?;
-                }
-                None => {}
-            }
-        }
-
-        if let Some(current_move) = &self.curr_move {
-            write!(f, " currmove {current_move}")?;
-        }
-
-        if let Some(current_move_number) = self.curr_move_number {
-            write!(f, " currmovenumber {current_move_number}")?;
-        }
-
-        if let Some(hash_full) = self.hash_full {
-            write!(f, " hashfull {hash_full}")?;
-        }
-
-        if let Some(nodes_per_second) = self.nps {
-            write!(f, " nps {nodes_per_second}")?;
-        }
-
-        if let Some(table_base_hits) = self.tb_hits {
-            write!(f, " tbhits {table_base_hits}")?;
-        }
-
-        if let Some(shredder_base_hits) = self.sb_hits {
-            write!(f, " sbhits {shredder_base_hits}")?;
-        }
-
-        if let Some(cpu_load) = self.cpu_load {
-            write!(f, " cpuload {cpu_load}")?;
-        }
-
-        if let Some(refutation) = &self.refutation {
-            write!(f, " refutation {} ", refutation.refuted_move)?;
-            uci_moves::fmt(&refutation.refutation, f)?;
-        }
-
-        if let Some(current_line) = &self.curr_line {
-            f.write_str(" currline")?;
-
-            if let Some(used_cpu) = current_line.used_cpu {
-                f.write_char(' ')?;
-                f.write_str(&used_cpu.to_string())?;
-            }
-
-            if !current_line.line.is_empty() {
-                f.write_char(' ')?;
-                uci_moves::fmt(&current_line.line, f)?;
-            }
-        }
-
-        if let Some(string) = &self.string {
-            write!(f, " string {string}")?;
-        }
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::Info;
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
     use crate::engine::{CurrLine, Depth, Refutation, Score, ScoreBound, ScoreWithBound};
     use pretty_assertions::assert_eq;
     use shakmaty::Color;
@@ -553,7 +558,10 @@ mod tests {
             }),
         };
 
-        assert_message_to_from_str!(engine m, "info depth 20 seldepth 31 time 12 nodes 4 pv e2e4 c7c5 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 string blabla");
+        let s = "info depth 20 seldepth 31 time 12 nodes 4 pv e2e4 c7c5 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 string blabla";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Info>(), Ok(m));
     }
 
     #[test]
@@ -598,14 +606,12 @@ mod tests {
             }),
         };
 
-        assert_from_str_message!(
-            engine
-            "info depth BAD depth 20 seldepth 31 time 12 depth also bad nodes 4 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 tbhits 4 string blabla",
+        assert_eq!(
+            "info depth BAD depth 20 seldepth 31 time 12 depth also bad nodes 4 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 tbhits 4 string blabla".parse::<Info>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            engine
-            m,
+        assert_eq!(
+            m.to_string(),
             "info depth 20 seldepth 31 time 12 nodes 4 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 4 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 string blabla"
         );
     }
@@ -623,10 +629,9 @@ mod tests {
             ..Default::default()
         };
 
-        assert_message_to_from_str!(
-            engine
-            m,
-            "info depth 13 string the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound"
-        );
+        let s = "info depth 13 string the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Info>(), Ok(m));
     }
 }

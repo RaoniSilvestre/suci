@@ -1,7 +1,5 @@
 use crate::errors::{ReadError, ReadWriteError};
-use crate::{BestMove, Id, Info};
-use crate::{FromProcessError, engine, gui};
-use crate::{Go, MessageParseError};
+use crate::{BestMove, EngineMessage, EngineOption, FromProcessError, Go, GuiMessage, Id, Info};
 use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout};
@@ -76,16 +74,15 @@ impl<E, G> Engine<E, G>
 where
     G: Write,
 {
-    // CLIPPY: Message is implemented for borrows as well
-    #[allow(clippy::needless_pass_by_value)]
     /// Sends a message.
     ///
     /// # Errors
     /// See [`Write::write_all`].
-    pub fn send<M>(&mut self, message: M) -> io::Result<()>
+    pub fn send<'a, M>(&mut self, message: M) -> io::Result<()>
     where
-        M: gui::traits::Message,
+        M: Into<GuiMessage<'a>>,
     {
+        let message = message.into();
         self.gui.write_all((message.to_string() + "\n").as_bytes())
     }
 }
@@ -115,17 +112,10 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    /// Reads a line and attempts to parse it into a given engine message.
+    /// Reads a line and attempts to parse it into an [`EngineMessage`].
     ///
     /// Skips lines which are only composed of whitespace.
-    ///
-    /// Since this accepts the engine trait, not the enum ([`engine::Message`]), you can use a specific
-    /// message type as the generic. Doing this is more performant, but it will treat
-    /// the other valid engine messages the same way as it would treat an unrecognized string.
-    pub fn read<M>(&mut self) -> Result<M, ReadError>
-    where
-        M: engine::traits::Message + FromStr<Err = MessageParseError>,
-    {
+    pub fn read(&mut self) -> Result<EngineMessage<'static>, ReadError> {
         let mut line = String::with_capacity(100);
 
         loop {
@@ -136,7 +126,7 @@ where
                 continue;
             }
 
-            match M::from_str(&line) {
+            match EngineMessage::from_str(&line) {
                 Ok(message) => return Ok(message),
                 Err(_) if !self.strict => line.clear(),
                 Err(error) => return Err(ReadError::Parse { error, got: line }),
@@ -151,29 +141,29 @@ where
     G: Write,
 {
     #[allow(clippy::missing_errors_doc)]
-    /// Sends the [`Uci`](gui::Uci) message and returns the engine's [`Id`]
-    /// once the [`UciOk`](engine::UciOk) message is received.
+    /// Sends the [`Uci`](crate::Uci) message and returns the engine's [`Id`]
+    /// once the [`UciOk`](crate::UciOk) message is received.
     ///
-    /// When an [`Option`](engine::Option) is encountered, the `option_receiver` function is called.
-    pub fn use_uci<'m>(
+    /// When an [`EngineOption`] is encountered, the `option_receiver` function is called.
+    pub fn use_uci(
         &mut self,
-        mut option_receiver: impl FnMut(crate::Option<'m>),
-    ) -> Result<Option<Id<'m>>, ReadWriteError> {
+        mut option_receiver: impl FnMut(EngineOption<'static>),
+    ) -> Result<Option<Id<'static>>, ReadWriteError> {
         self.send(crate::Uci).map_err(ReadWriteError::Write)?;
 
         let mut id = None::<Id>;
 
         loop {
             match self.read().map_err(ReadWriteError::Read)? {
-                engine::Message::Option(option) => option_receiver(option),
-                engine::Message::Id(new_id) => {
+                EngineMessage::Option(option) => option_receiver(option),
+                EngineMessage::Id(new_id) => {
                     id = Some(if let Some(id) = id {
                         id.updated(new_id)
                     } else {
                         new_id
                     });
                 }
-                engine::Message::UciOk(_) => return Ok(id),
+                EngineMessage::UciOk(_) => return Ok(id),
                 _ => (),
             }
         }
@@ -185,17 +175,17 @@ where
     ///
     /// Note that the engine will only send [`BestMove`]
     /// if you configure the message to set a constraint on the engine's calculation.
-    pub fn go<'m>(
+    pub fn go(
         &mut self,
         message: &Go,
-        mut info_receiver: impl FnMut(Info<'m>),
+        mut info_receiver: impl FnMut(Info<'static>),
     ) -> Result<BestMove, ReadWriteError> {
         self.send(message).map_err(ReadWriteError::Write)?;
 
         loop {
             match self.read().map_err(ReadWriteError::Read)? {
-                engine::Message::Info(info) => info_receiver(*info),
-                engine::Message::BestMove(best_move) => {
+                EngineMessage::Info(info) => info_receiver(*info),
+                EngineMessage::BestMove(best_move) => {
                     return Ok(best_move);
                 }
                 _ => (),
@@ -204,12 +194,12 @@ where
     }
 
     #[allow(clippy::missing_errors_doc)]
-    /// Sends [`IsReady`](gui::IsReady) and waits for [`ReadyOk`](engine::ReadyOk).
+    /// Sends [`IsReady`](crate::IsReady) and waits for [`ReadyOk`](crate::ReadyOk).
     pub fn is_ready(&mut self) -> Result<(), ReadWriteError> {
         self.send(crate::IsReady).map_err(ReadWriteError::Write)?;
 
         loop {
-            if let engine::Message::ReadyOk(_) = self.read().map_err(ReadWriteError::Read)? {
+            if let EngineMessage::ReadyOk(_) = self.read().map_err(ReadWriteError::Read)? {
                 return Ok(());
             }
         }
@@ -219,7 +209,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MessageParseErrorKind, NormalBestMove, OptionType};
+    use crate::errors::MessageParseError;
+    use crate::{
+        EngineMessage, EngineOption, EngineOptionType, MessageParseErrorKind, NormalBestMove,
+    };
     use pretty_assertions::{assert_eq, assert_matches};
     use shakmaty::uci::UciMove;
     use std::borrow::Cow;
@@ -240,23 +233,21 @@ mod tests {
         assert_eq!(engine.gui, b"isready\n");
     }
 
-    // CLIPPY: It's literally used???
-    #[allow(clippy::extra_unused_lifetimes)]
     #[test]
-    fn lifetimes<'a>() {
+    fn lifetimes() {
         let mut engine = Engine {
             engine: b"uciok\noption name n type button".as_slice(),
             gui: Vec::<u8>::new(),
             strict: false,
         };
 
-        let _: engine::Message<'static> = engine.read::<engine::Message>().unwrap();
+        let _: EngineMessage<'static> = engine.read().unwrap();
 
         assert_eq!(
-            engine.read::<engine::Message>().unwrap(),
-            engine::Message::Option(crate::Option {
-                name: Cow::Borrowed::<'a>("n"),
-                r#type: OptionType::Button,
+            engine.read().unwrap(),
+            EngineMessage::Option(EngineOption {
+                name: Cow::Borrowed("n"),
+                r#type: EngineOptionType::Button,
             })
         );
     }
@@ -273,9 +264,9 @@ mod tests {
             .use_uci(|option| {
                 assert_eq!(
                     option,
-                    crate::Option {
+                    EngineOption {
                         name: Cow::Borrowed("Horsey range"),
-                        r#type: OptionType::String {
+                        r#type: EngineOptionType::String {
                             default: Some(Cow::Borrowed("the biggest!!"))
                         }
                     }
@@ -307,7 +298,7 @@ mod tests {
 
         engine.skip_lines(3).unwrap();
 
-        assert_matches!(engine.read().unwrap(), engine::Message::ReadyOk(_));
+        assert_matches!(engine.read().unwrap(), EngineMessage::ReadyOk(_));
     }
 
     #[test]
@@ -319,15 +310,15 @@ mod tests {
         engine.skip_lines(3).unwrap();
 
         assert_eq!(
-            engine.read::<crate::Option>().unwrap(),
-            crate::Option {
+            engine.read().unwrap(),
+            EngineMessage::Option(EngineOption {
                 name: Cow::Borrowed("Hash"),
-                r#type: OptionType::Spin {
+                r#type: EngineOptionType::Spin {
                     default: Some(16),
                     min: Some(1),
                     max: Some(33_554_432)
                 },
-            }
+            })
         );
     }
 
@@ -379,7 +370,7 @@ mod tests {
 
     #[test]
     fn use_uci() {
-        use crate::{Id, Option};
+        use crate::Id;
 
         let mut engine = input_engine(
             b"id name Big Tuna author Fischer\noption name Hash type spin default 16 min 1 max 33554432\nuciok\n",
@@ -398,9 +389,9 @@ mod tests {
 
         assert_eq!(
             options,
-            [Option {
+            [EngineOption {
                 name: Cow::Borrowed("Hash"),
-                r#type: OptionType::Spin {
+                r#type: EngineOptionType::Spin {
                     default: Some(16),
                     min: Some(1),
                     max: Some(33_554_432)

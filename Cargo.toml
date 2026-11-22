@@ -9,7 +9,7 @@ edition = "2024"
 authors = ["Leonard D."]
 license = "GPL-3.0"
 repository = "https://github.com/tigerros/ruci"
-rust-version = "1.85.1"
+rust-version = "1.99"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -20,18 +20,15 @@ members = [
 ]
 
 [workspace.dependencies]
-anyhow = { version = "1.0.87", default-features = false }
-paste = { version = "1", default-features = false }
 ruci = { version = "3.0.0-alpha", path = "." }
 serde = { version = "1.0.197", default-features = false }
-shakmaty = { version = "0.29.0", default-features = false }
+shakmaty = { version = "0.30.3", default-features = false }
 
 [features]
 # Enables serde support for most types. All implementations are derived with no parameters.
 serde = ["dep:serde", "serde/alloc", "shakmaty/serde", "shakmaty/alloc"]
 
 [dependencies]
-paste = { workspace = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 shakmaty = { workspace = true }
 

@@ -1,7 +1,8 @@
-use super::{pointers, traits};
-use crate::OptionReplaceIf;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::errors::MessageParseError;
+use crate::parsing;
+use crate::{EngineMessage, OptionReplaceIf, UciMessage};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 use shakmaty::uci::UciMove;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -24,12 +25,43 @@ pub enum BestMove {
 }
 
 impl BestMove {
+    pub(crate) const NAME: &'static str = "bestmove";
+
     /// Returns the inner [`NormalBestMove`], if [`Self`] matches [`Self::Normal`].
     pub const fn normal(self) -> Option<NormalBestMove> {
         match self {
             Self::Other => None,
             Self::Normal(n) => Some(n),
         }
+    }
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Self {
+        let mut r#move = None;
+        let mut ponder_encountered = false;
+        let mut ponder = None;
+
+        for part in parts {
+            if ponder_encountered {
+                ponder.replace_if(part.parse().ok());
+            } else if part.trim() == "ponder" {
+                ponder_encountered = true;
+            } else {
+                r#move.replace_if(part.parse().ok());
+            }
+        }
+
+        r#move.map_or(Self::Other, |r#move| {
+            Self::Normal(NormalBestMove { r#move, ponder })
+        })
+    }
+}
+
+impl FromStr for BestMove {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Ok(Self::from_str_parts(parts))
     }
 }
 
@@ -51,37 +83,17 @@ impl From<NormalBestMove> for BestMove {
     }
 }
 
-impl From<NormalBestMove> for crate::Message<'_> {
+impl From<NormalBestMove> for UciMessage<'_> {
     fn from(value: NormalBestMove) -> Self {
-        Self::Engine(super::Message::BestMove(value.into()))
+        Self::Engine(EngineMessage::BestMove(value.into()))
     }
 }
 
-impl From<NormalBestMove> for super::Message<'_> {
+impl From<NormalBestMove> for EngineMessage<'_> {
     fn from(value: NormalBestMove) -> Self {
         Self::BestMove(value.into())
     }
 }
-
-impl_message!(BestMove);
-message_from_impl!(engine BestMove);
-from_str_parts!(impl BestMove for parts -> Self  {
-    let mut r#move = None;
-    let mut ponder_encountered = false;
-    let mut ponder = None;
-
-    for part in parts {
-        if ponder_encountered {
-            ponder.replace_if(part.parse().ok());
-        } else if part.trim() == "ponder" {
-            ponder_encountered = true;
-        } else {
-            r#move.replace_if(part.parse().ok());
-        }
-    }
-
-    r#move.map_or(Self::Other, |r#move| Self::Normal(NormalBestMove { r#move, ponder }))
-});
 
 impl Display for BestMove {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -103,10 +115,7 @@ impl Display for BestMove {
 
 #[cfg(test)]
 mod tests {
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
-    use crate::engine::{BestMove, NormalBestMove};
+    use super::{BestMove, NormalBestMove};
     use shakmaty::uci::UciMove;
 
     #[test]
@@ -117,7 +126,8 @@ mod tests {
         }
         .into();
 
-        assert_message_to_from_str!(engine m, "bestmove e2e4 ponder c7c5");
+        assert_eq!(m.to_string(), "bestmove e2e4 ponder c7c5");
+        assert_eq!("bestmove e2e4 ponder c7c5".parse::<BestMove>(), Ok(m));
 
         let m: BestMove = NormalBestMove {
             r#move: UciMove::from_ascii(b"d2d4").unwrap(),
@@ -125,8 +135,11 @@ mod tests {
         }
         .into();
 
-        assert_from_str_message!(engine "bestmove oops d2d4 ponder c7c5 ignorethis", Ok(m));
-        assert_message_to_str!(engine m, "bestmove d2d4 ponder c7c5");
+        assert_eq!(
+            "bestmove oops d2d4 ponder c7c5 ignorethis".parse::<BestMove>(),
+            Ok(m)
+        );
+        assert_eq!(m.to_string(), "bestmove d2d4 ponder c7c5");
     }
 
     #[test]
@@ -137,15 +150,18 @@ mod tests {
         }
         .into();
 
-        assert_from_str_message!(engine "bestmove junk e2e4 ponder c7c5\n", Ok(m));
-        assert_message_to_str!(engine m, "bestmove e2e4 ponder c7c5");
+        assert_eq!(
+            "bestmove junk e2e4 ponder c7c5\n".parse::<BestMove>(),
+            Ok(m)
+        );
+        assert_eq!(m.to_string(), "bestmove e2e4 ponder c7c5");
     }
 
     #[test]
     fn to_from_str_other() {
         let m: BestMove = BestMove::Other;
 
-        assert_from_str_message!(engine "bestmove (none)\n", Ok(m));
-        assert_message_to_str!(engine m, "bestmove");
+        assert_eq!("bestmove (none)\n".parse::<BestMove>(), Ok(m));
+        assert_eq!(m.to_string(), "bestmove");
     }
 }

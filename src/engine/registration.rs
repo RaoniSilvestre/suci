@@ -1,8 +1,7 @@
-use super::{pointers, traits};
-use crate::MessageParseErrorKind;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::errors::MessageParseError;
+use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 
 /// Engine's registration status.
 ///
@@ -18,23 +17,34 @@ pub enum Registration {
     Error,
 }
 
-impl_message!(Registration);
-message_from_impl!(engine Registration);
-from_str_parts!(impl Registration for parts -> Result {
-    for part in parts {
-        match part.trim() {
-            "checking" => return Ok(Self::Checking),
-            "ok" => return Ok(Self::Ok),
-            "error" => return Ok(Self::Error),
-            _ => ()
-        }
-    }
+impl Registration {
+    pub(crate) const NAME: &'static str = "registration";
 
-    Err(MessageParseError {
-        expected: "checking, ok or error",
-        kind: MessageParseErrorKind::ValueParseError
-    })
-});
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        for part in parts {
+            match part.trim() {
+                "checking" => return Ok(Self::Checking),
+                "ok" => return Ok(Self::Ok),
+                "error" => return Ok(Self::Error),
+                _ => (),
+            }
+        }
+
+        Err(MessageParseError {
+            expected: "checking, ok or error",
+            kind: MessageParseErrorKind::ValueParseError,
+        })
+    }
+}
+
+impl FromStr for Registration {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
+    }
+}
 
 impl Display for Registration {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -53,38 +63,43 @@ impl Display for Registration {
 #[cfg(test)]
 mod tests {
     use super::Registration;
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
-    use crate::{MessageParseError, MessageParseErrorKind};
+    use crate::MessageParseErrorKind;
+    use crate::errors::MessageParseError;
 
     #[test]
     fn to_from_str_checking() {
-        assert_message_to_from_str!(engine Registration::Checking, "registration checking");
+        let m = Registration::Checking;
+        let str = "registration checking";
+
+        assert_eq!(m.to_string(), str);
+        assert_eq!(str.parse::<Registration>(), Ok(m));
     }
 
     #[test]
     fn to_from_str_ok() {
-        assert_message_to_from_str!(engine Registration::Ok, "registration ok");
+        let m = Registration::Ok;
+        let str = "registration ok";
+
+        assert_eq!(m.to_string(), str);
+        assert_eq!(str.parse::<Registration>(), Ok(m));
     }
 
     #[test]
     fn to_from_str_error() {
         let m = Registration::Error;
 
-        assert_from_str_message!(
-            engine
-            "registration tes error\n",
-            Ok(m)
-        );
-        assert_message_to_str!(engine m, "registration error");
+        assert_eq!("registration tes error\n".parse::<Registration>(), Ok(m));
+        assert_eq!(m.to_string(), "registration error");
     }
 
     #[test]
     fn parse_error() {
-        assert_from_str_message!(engine "registration invalid", Err::<Registration, MessageParseError>(MessageParseError {
-            expected: "checking, ok or error",
-            kind: MessageParseErrorKind::ValueParseError
-        }));
+        assert_eq!(
+            "registration invalid".parse::<Registration>(),
+            Err(MessageParseError {
+                expected: "checking, ok or error",
+                kind: MessageParseErrorKind::ValueParseError,
+            })
+        );
     }
 }

@@ -1,8 +1,7 @@
-use super::{pointers, traits};
-use crate::MessageParseErrorKind;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::errors::MessageParseError;
+use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -16,23 +15,34 @@ pub enum CopyProtection {
     Error,
 }
 
-impl_message!(CopyProtection);
-message_from_impl!(engine CopyProtection);
-from_str_parts!(impl CopyProtection for parts -> Result {
-    for part in parts {
-        // TODO: Should it be lowercased (case insensitive)?
-        match part.trim() {
-            "ok" => return Ok(Self::Ok),
-            "error" => return Ok(Self::Error),
-            _ => ()
-        }
-    }
+impl CopyProtection {
+    pub(crate) const NAME: &'static str = "copyprotection";
 
-    Err(MessageParseError {
-        expected: "ok or error",
-        kind: MessageParseErrorKind::ValueParseError
-    })
-});
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        for part in parts {
+            // TODO: Should it be lowercased (case insensitive)?
+            match part.trim() {
+                "ok" => return Ok(Self::Ok),
+                "error" => return Ok(Self::Error),
+                _ => (),
+            }
+        }
+
+        Err(MessageParseError {
+            expected: "ok or error",
+            kind: MessageParseErrorKind::ValueParseError,
+        })
+    }
+}
+
+impl FromStr for CopyProtection {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
+    }
+}
 
 impl Display for CopyProtection {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -50,28 +60,35 @@ impl Display for CopyProtection {
 #[cfg(test)]
 mod tests {
     use super::CopyProtection;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str};
-    use crate::{MessageParseError, MessageParseErrorKind};
+    use crate::MessageParseErrorKind;
+    use crate::errors::MessageParseError;
 
     #[test]
     fn to_from_str_ok() {
         let m = CopyProtection::Ok;
         let str = "copyprotection ok";
-        assert_message_to_from_str!(engine m, str);
+
+        assert_eq!(m.to_string(), str);
+        assert_eq!(str.parse::<CopyProtection>(), Ok(m));
     }
 
     #[test]
     fn to_from_str_error() {
         let m = CopyProtection::Error;
         let str = "copyprotection error";
-        assert_message_to_from_str!(engine m, str);
+
+        assert_eq!(m.to_string(), str);
+        assert_eq!(str.parse::<CopyProtection>(), Ok(m));
     }
 
     #[test]
     fn parse_error() {
-        assert_from_str_message!(engine "copyprotection why   \t are you here? 🤨\n\n", Err::<CopyProtection, MessageParseError>(MessageParseError {
-            expected: "ok or error",
-            kind: MessageParseErrorKind::ValueParseError,
-        }));
+        assert_eq!(
+            "copyprotection why   \t are you here? 🤨\n\n".parse::<CopyProtection>(),
+            Err(MessageParseError {
+                expected: "ok or error",
+                kind: MessageParseErrorKind::ValueParseError,
+            })
+        );
     }
 }

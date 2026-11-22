@@ -1,9 +1,9 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::gui::pointers::GoParameterPointer;
+use super::pointers::GoParameterPointer;
+use crate::errors::MessageParseError;
 use crate::{OptionReplaceIf, parsing, uci_moves};
 use core::fmt::{Display, Formatter};
 use core::num::NonZeroUsize;
+use core::str::{FromStr, Split};
 use shakmaty::uci::UciMove;
 use std::borrow::Cow;
 
@@ -49,6 +49,8 @@ pub struct Go<'a> {
 }
 
 impl Go<'_> {
+    pub(crate) const NAME: &'static str = "go";
+
     /// Calls [`Cow::into_owned`] on each [`Cow`] field.
     /// The resulting value has a `'static` lifetime.
     #[must_use]
@@ -83,45 +85,52 @@ impl Go<'_> {
             infinite,
         }
     }
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Self {
+        let mut this = Self::default();
+        let mut search_moves = Vec::new();
+        let parameter_fn = |parameter, _, value: &str, parts| {
+            match parameter {
+                GoParameterPointer::SearchMoves => {
+                    let parsed = uci_moves::from_str(value);
+
+                    if !parsed.is_empty() {
+                        search_moves = parsed;
+                    }
+                }
+                GoParameterPointer::Ponder => this.ponder = true,
+                GoParameterPointer::WTime => this.w_time.replace_if(value.parse().ok()),
+                GoParameterPointer::BTime => this.b_time.replace_if(value.parse().ok()),
+                GoParameterPointer::WInc => this.w_inc.replace_if(value.parse().ok()),
+                GoParameterPointer::BInc => this.b_inc.replace_if(value.parse().ok()),
+                GoParameterPointer::MovesToGo => this.moves_to_go.replace_if(value.parse().ok()),
+                GoParameterPointer::Depth => this.depth.replace_if(value.parse().ok()),
+                GoParameterPointer::Nodes => this.nodes.replace_if(value.parse().ok()),
+                GoParameterPointer::Mate => this.mate.replace_if(value.parse().ok()),
+                GoParameterPointer::MoveTime => this.move_time.replace_if(value.parse().ok()),
+                GoParameterPointer::Infinite => this.infinite = true,
+            }
+
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        this.search_moves = Cow::from(search_moves);
+
+        this
+    }
 }
 
-impl_message!(Go<'_>);
-message_from_impl!(gui Go<'a>);
-from_str_parts!(impl Go<'_> for parts -> Self {
-    let mut this = Self::default();
-    let mut search_moves = Vec::new();
-    let parameter_fn = |parameter, _, value: &str, parts| {
-        match parameter {
-            GoParameterPointer::SearchMoves => {
-                let parsed = uci_moves::from_str(value);
+impl FromStr for Go<'_> {
+    type Err = MessageParseError;
 
-                if !parsed.is_empty() {
-                    search_moves = parsed;
-                }
-            },
-            GoParameterPointer::Ponder => this.ponder = true,
-            GoParameterPointer::WTime => this.w_time.replace_if(value.parse().ok()),
-            GoParameterPointer::BTime => this.b_time.replace_if(value.parse().ok()),
-            GoParameterPointer::WInc => this.w_inc.replace_if(value.parse().ok()),
-            GoParameterPointer::BInc => this.b_inc.replace_if(value.parse().ok()),
-            GoParameterPointer::MovesToGo => this.moves_to_go.replace_if(value.parse().ok()),
-            GoParameterPointer::Depth => this.depth.replace_if(value.parse().ok()),
-            GoParameterPointer::Nodes => this.nodes.replace_if(value.parse().ok()),
-            GoParameterPointer::Mate => this.mate.replace_if(value.parse().ok()),
-            GoParameterPointer::MoveTime => this.move_time.replace_if(value.parse().ok()),
-            GoParameterPointer::Infinite => this.infinite = true
-        }
-
-        Some(parts)
-    };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    this.search_moves = Cow::from(search_moves);
-
-    this
-});
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Ok(Self::from_str_parts(parts))
+    }
+}
 
 impl Display for Go<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -182,10 +191,7 @@ impl Display for Go<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
-    use crate::gui::Go;
+    use super::Go;
     use core::num::NonZeroUsize;
     use shakmaty::uci::UciMove;
     use std::borrow::Cow;
@@ -212,11 +218,10 @@ mod tests {
             infinite: true,
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "go searchmoves e2e4 d2d4 ponder wtime 5 binc 45 depth 20 infinite"
-        );
+        let s = "go searchmoves e2e4 d2d4 ponder wtime 5 binc 45 depth 20 infinite";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Go>(), Ok(m));
     }
 
     #[test]
@@ -236,32 +241,19 @@ mod tests {
             infinite: false,
         };
 
-        assert_from_str_message!(
-            gui
-            "go mate 7 ponder depth 20 depth bad nodes nope nope nodes 2 mate 0",
+        assert_eq!(
+            "go mate 7 ponder depth 20 depth bad nodes nope nope nodes 2 mate 0".parse::<Go>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            gui
-            m,
-            "go ponder depth 20 nodes 2 mate 0"
-        );
+        assert_eq!(m.to_string(), "go ponder depth 20 nodes 2 mate 0");
     }
 
     #[test]
     fn to_from_str_empty() {
         let m = Go::default();
 
-        assert_from_str_message!(
-            gui
-            "     go    this is  empty)",
-            Ok(m.clone())
-        );
-        assert_message_to_str!(
-            gui
-            m,
-            "go"
-        );
+        assert_eq!("     go    this is  empty)".parse::<Go>(), Ok(m.clone()));
+        assert_eq!(m.to_string(), "go");
     }
 
     #[test]
@@ -281,11 +273,10 @@ mod tests {
             infinite: false,
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "go wtime 1000 btime 1500 winc 10 binc 10 movestogo 40"
-        );
+        let s = "go wtime 1000 btime 1500 winc 10 binc 10 movestogo 40";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Go>(), Ok(m));
     }
 
     #[test]
@@ -305,11 +296,10 @@ mod tests {
             infinite: false,
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "go depth 5 nodes 1000000 mate 3 movetime 5000"
-        );
+        let s = "go depth 5 nodes 1000000 mate 3 movetime 5000";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Go>(), Ok(m));
     }
 
     #[test]
@@ -335,26 +325,23 @@ mod tests {
             infinite: false,
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "go searchmoves e2e4 e7e5 f1c4"
-        );
+        let s = "go searchmoves e2e4 e7e5 f1c4";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Go>(), Ok(m));
     }
 
     #[test]
     fn invalid_parameters() {
         // Test that invalid numeric parameters are ignored
-        assert_from_str_message!(
-            gui
-            "go depth -1 nodes -5 mate abc movetime def",
+        assert_eq!(
+            "go depth -1 nodes -5 mate abc movetime def".parse::<Go>(),
             Ok(Go::default())
         );
 
         // Test that unknown parameters are ignored
-        assert_from_str_message!(
-            gui
-            "go unknown_param 123 another_param xyz depth 10",
+        assert_eq!(
+            "go unknown_param 123 another_param xyz depth 10".parse::<Go>(),
             Ok(Go {
                 depth: Some(10),
                 ..Go::default()
@@ -379,10 +366,9 @@ mod tests {
             infinite: false,
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "go movetime 15000"
-        );
+        let s = "go movetime 15000";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<Go>(), Ok(m));
     }
 }

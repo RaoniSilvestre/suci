@@ -19,7 +19,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut process = Command::new("stockfish")
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())

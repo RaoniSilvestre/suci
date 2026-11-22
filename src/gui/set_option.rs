@@ -1,15 +1,14 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use super::pointers::SetOptionParameterPointer;
 use crate::errors::MessageParseError;
-use crate::gui::pointers::SetOptionParameterPointer;
 use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 use std::borrow::Cow;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-/// Sets a configuration option ([`Option`](crate::engine::Option)) of the engine.
+/// Sets a configuration option ([`EngineOption`](crate::engine::EngineOption)) of the engine.
 /// They are retrieved with [`Uci`](super::Uci).
 ///
 /// <https://backscattering.de/chess/uci/#gui-setoption>
@@ -19,6 +18,8 @@ pub struct SetOption<'a> {
 }
 
 impl SetOption<'_> {
+    pub(crate) const NAME: &'static str = "setoption";
+
     /// Calls [`Cow::into_owned`] on each [`Cow`] field.
     /// The resulting value has a `'static` lifetime.
     #[must_use]
@@ -28,33 +29,42 @@ impl SetOption<'_> {
             value: self.value.map(Cow::into_owned).map(Cow::Owned),
         }
     }
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        let mut name = None;
+        let mut value_parameter = None;
+        let parameter_fn = |parameter, _, value: &str, parts| {
+            match parameter {
+                SetOptionParameterPointer::Name => name = Some(value.to_owned()),
+                SetOptionParameterPointer::Value => {
+                    value_parameter = Some(Cow::Owned(value.to_owned()));
+                }
+            }
+
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        Ok(Self {
+            name: Cow::Owned(name.ok_or(MessageParseError {
+                expected: "name",
+                kind: MessageParseErrorKind::MissingParameters,
+            })?),
+            value: value_parameter,
+        })
+    }
 }
 
-impl_message!(SetOption<'_>);
-message_from_impl!(gui SetOption<'a>);
-from_str_parts!(impl SetOption<'_> for parts -> Result {
-    let mut name = None;
-    let mut value_parameter = None;
-    let parameter_fn = |parameter, _, value: &str, parts| {
-        match parameter {
-            SetOptionParameterPointer::Name => name = Some(value.to_owned()),
-            SetOptionParameterPointer::Value => value_parameter = Some(Cow::Owned(value.to_owned())),
-        }
+impl FromStr for SetOption<'_> {
+    type Err = MessageParseError;
 
-        Some(parts)
-    };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    Ok(Self {
-        name: Cow::Owned(name.ok_or(MessageParseError {
-            expected: "name",
-            kind: MessageParseErrorKind::MissingParameters
-        })?),
-        value: value_parameter,
-    })
-});
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
+    }
+}
 
 impl Display for SetOption<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -67,10 +77,7 @@ impl Display for SetOption<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
-    use crate::gui::SetOption;
+    use super::SetOption;
     use std::borrow::Cow;
 
     #[test]
@@ -80,25 +87,22 @@ mod tests {
             value: Some(Cow::from("1")),
         };
 
-        assert_message_to_from_str!(
-            gui
-            m,
-            "setoption name Skill Level value 1"
-        );
+        let s = "setoption name Skill Level value 1";
+
+        assert_eq!(m.to_string(), s);
+        assert_eq!(s.parse::<SetOption>(), Ok(m));
 
         let m = SetOption {
             name: Cow::from("Skill     Level"),
             value: Some(Cow::from("test   \tfoo")),
         };
 
-        assert_from_str_message!(
-            gui
-            "setoption value test   \tfoo   \t name     Skill     Level    ",
+        assert_eq!(
+            "setoption value test   \tfoo   \t name     Skill     Level    ".parse::<SetOption>(),
             Ok(m.clone())
         );
-        assert_message_to_str!(
-            gui
-            m,
+        assert_eq!(
+            m.to_string(),
             "setoption name Skill     Level value test   \tfoo"
         );
     }

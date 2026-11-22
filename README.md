@@ -10,7 +10,7 @@ This crate is a full implementation of the [UCI protocol](https://backscattering
 The UCI protocol is the most widely used way to communicate with chess engines and vice versa.
 
 Specifically, this crate contains:
-- Types to represent every UCI message.
+- Concrete types and enums for every UCI message: `UciMessage`, `EngineMessage`, and `GuiMessage`.
 - The means to convert strings to these types.
 - The means to convert these types to a string.
 - The `Engine` struct for communicating with an engine (see the [example](examples/go-std), run it with `cargo run -p go-std`).

@@ -1,5 +1,5 @@
+use crate::MessageParseErrorKind;
 use crate::errors::MessageParseError;
-use crate::{MessageParseErrorKind, MessagePointer};
 use core::str::FromStr;
 
 /// Returns the first line of `s`, trimmed.
@@ -15,10 +15,7 @@ fn first_line(s: &str) -> &str {
 pub fn collect_message<'s>(
     target: &'static str,
     s: &'s str,
-) -> Result<core::str::Split<'s, char>, MessageParseError>
-where
-    MessagePointer: FromStr,
-{
+) -> Result<core::str::Split<'s, char>, MessageParseError> {
     let mut parts = first_line(s).split(' ');
     parts
         .find(|&part| part == target)

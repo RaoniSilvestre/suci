@@ -1,18 +1,17 @@
-use super::{pointers, traits};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::engine::pointers::IdParameterPointer;
+use super::pointers::IdParameterPointer;
 use crate::errors::MessageParseError;
 use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
+use core::str::{FromStr, Split};
 use std::borrow::Cow;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Engine's identification information.
 ///
 /// Sent after [`Uci`](crate::gui::Uci).
 ///
 /// <https://backscattering.de/chess/uci/#engine-id>
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Id<'a> {
     /// <https://backscattering.de/chess/uci/#engine-id-name>
     Name(Cow<'a, str>),
@@ -25,6 +24,8 @@ pub enum Id<'a> {
 }
 
 impl Id<'_> {
+    pub(crate) const NAME: &'static str = "id";
+
     /// Calls [`Cow::into_owned`] on each [`Cow`] field.
     /// The resulting value has a `'static` lifetime.
     #[must_use]
@@ -92,44 +93,51 @@ impl Id<'_> {
             }
         }
     }
+
+    pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
+        let mut name = None::<String>;
+        let mut author = None::<String>;
+        let parameter_fn = |parameter, _, value: &str, parts| {
+            match parameter {
+                IdParameterPointer::Name => name = Some(value.to_owned()),
+                IdParameterPointer::Author => author = Some(value.to_owned()),
+            }
+
+            Some(parts)
+        };
+
+        let mut value = String::with_capacity(200);
+        parsing::apply_parameters(parts, &mut value, parameter_fn);
+
+        #[allow(clippy::option_if_let_else)]
+        if let Some(name) = name {
+            if let Some(author) = author {
+                Ok(Self::NameAndAuthor {
+                    name: Cow::Owned(name),
+                    author: Cow::Owned(author),
+                })
+            } else {
+                Ok(Self::Name(Cow::Owned(name)))
+            }
+        } else if let Some(author) = author {
+            Ok(Self::Author(Cow::Owned(author)))
+        } else {
+            Err(MessageParseError {
+                expected: "name or author",
+                kind: MessageParseErrorKind::MissingParameters,
+            })
+        }
+    }
 }
 
-impl_message!(Id<'_>);
-message_from_impl!(engine Id<'a>);
-from_str_parts!(impl Id<'_> for parts -> Result {
-    let mut name = None::<String>;
-    let mut author = None::<String>;
-    let parameter_fn = |parameter, _, value: &str, parts| {
-        match parameter {
-            IdParameterPointer::Name => name = Some(value.to_owned()),
-            IdParameterPointer::Author => author = Some(value.to_owned()),
-        }
+impl FromStr for Id<'_> {
+    type Err = MessageParseError;
 
-        Some(parts)
-    };
-
-    let mut value = String::with_capacity(200);
-    parsing::apply_parameters(parts, &mut value, parameter_fn);
-
-    #[allow(clippy::option_if_let_else)]
-    if let Some(name) = name {
-        if let Some(author) = author {
-            Ok(Self::NameAndAuthor {
-                name: Cow::Owned(name),
-                author: Cow::Owned(author),
-            })
-        } else {
-            Ok(Self::Name(Cow::Owned(name)))
-        }
-    } else if let Some(author) = author {
-        Ok(Self::Author(Cow::Owned(author)))
-    } else {
-        Err(MessageParseError {
-            expected: "name or author",
-            kind: MessageParseErrorKind::MissingParameters
-        })
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts = parsing::collect_message(Self::NAME, s)?;
+        Self::from_str_parts(parts)
     }
-});
+}
 
 impl Display for Id<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -150,9 +158,6 @@ impl Display for Id<'_> {
 #[cfg(test)]
 mod tests {
     use super::Id;
-    use crate::dev_macros::{
-        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
-    };
     use std::borrow::Cow;
 
     #[test]
@@ -162,11 +167,21 @@ mod tests {
             author: Cow::from("The stockfish developers"),
         };
 
-        assert_message_to_from_str!(engine m, "id name Stockfish 16.1 author The stockfish developers");
+        assert_eq!(
+            m.to_string(),
+            "id name Stockfish 16.1 author The stockfish developers"
+        );
+        assert_eq!(
+            "id name Stockfish 16.1 author The stockfish developers".parse::<Id>(),
+            Ok(m)
+        );
 
         let m = Id::Name(Cow::from("Stockfish 16.1"));
 
-        assert_from_str_message!(engine "id name Stockfish 16.1 \n ignored", Ok(m.clone()));
-        assert_message_to_str!(engine m, "id name Stockfish 16.1");
+        assert_eq!(
+            "id name Stockfish 16.1 \n ignored".parse::<Id>(),
+            Ok(m.clone())
+        );
+        assert_eq!(m.to_string(), "id name Stockfish 16.1");
     }
 }
