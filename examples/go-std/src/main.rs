@@ -10,7 +10,6 @@
 //!
 //! Requires that you have installed Stockfish.
 
-use ruci::Engine;
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
 use std::borrow::Cow;
@@ -18,6 +17,7 @@ use std::io::BufRead;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
+use suci::Engine;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut process = Command::new("stockfish")
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("== Sending custom FEN with an extra move");
 
     // You can also use a reference
-    engine.send(ruci::Position::Fen {
+    engine.send(suci::Position::Fen {
         fen: Cow::Owned(Fen::from_ascii(
             b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5",
         )?),
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut infos = Vec::new();
     let best_move = engine.go(
-        &ruci::Go {
+        &suci::Go {
             depth: Some(20),
             ..Default::default()
         },
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("== Sending go again, this time receiving and printing them on a separate thread");
 
-    let (info_sender, info_receiver) = mpsc::channel::<ruci::Info>();
+    let (info_sender, info_receiver) = mpsc::channel::<suci::Info>();
 
     let info_printing_thread = thread::spawn(move || {
         while let Ok(info) = info_receiver.recv() {
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let _ = engine.go(
-        &ruci::Go {
+        &suci::Go {
             depth: Some(20),
             ..Default::default()
         },
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(info_sender);
 
     println!("== Sending quit");
-    engine.send(ruci::Quit)?;
+    engine.send(suci::Quit)?;
     println!("== Sent. Waiting for engine process and info printing thread to finish");
     info_printing_thread.join().unwrap();
     process.wait()?;

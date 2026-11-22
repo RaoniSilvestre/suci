@@ -1,14 +1,14 @@
 [package]
-name = "ruci"
-version = "3.0.0-alpha"
-description = "A UCI (Universal Chess Interface) crate."
+name = "suci"
+version = "0.1.0"
+description = "SUCI: a simple Rust UCI crate."
 categories = ["parser-implementations", "game-development"]
 keywords = ["chess", "uci", "parser"]
-include = ["src", "README.md", "LICENSE"]
+include = ["src", "README.md", "LICENSE", "NOTICE"]
 edition = "2024"
-authors = ["Leonard D."]
-license = "GPL-3.0"
-repository = "https://github.com/tigerros/ruci"
+authors = ["Leonard D.", "Raoni Silvestre"]
+license = "GPL-3.0-only"
+repository = "https://github.com/RaoniSilvestre/suci"
 rust-version = "1.99"
 
 [package.metadata.docs.rs]
@@ -20,9 +20,9 @@ members = [
 ]
 
 [workspace.dependencies]
-ruci = { version = "3.0.0-alpha", path = "." }
 serde = { version = "1.0.197", default-features = false }
 shakmaty = { version = "0.30.3", default-features = false }
+suci = { version = "0.1.0", path = "." }
 
 [features]
 # Enables serde support for most types. All implementations are derived with no parameters.

@@ -6,17 +6,17 @@
 //! # A note on message enums
 //! If you write something like:
 //! ```rust
-//! # use ruci::{EngineMessage, Info, UciMessage};
-//! # use ruci::gui;
-//! # use ruci::Go;
+//! # use suci::{EngineMessage, Info, UciMessage};
+//! # use suci::gui;
+//! # use suci::Go;
 //! let _: EngineMessage = EngineMessage::Info(Box::new(Info::default()));
 //! let _: UciMessage = UciMessage::Gui(gui::GuiMessage::Go(Go::default()));
 //! ```
 //!
 //! Use instead:
 //! ```rust
-//! # use ruci::{EngineMessage, Info, UciMessage};
-//! # use ruci::Go;
+//! # use suci::{EngineMessage, Info, UciMessage};
+//! # use suci::Go;
 //! let _: EngineMessage = Info::default().into();
 //! let _: UciMessage = Go::default().into();
 //! ```
