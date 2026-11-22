@@ -45,7 +45,6 @@ impl Id<'_> {
     ///
     /// # Examples
     /// ```rust
-    /// # use pretty_assertions::assert_eq;
     /// # use suci::engine::Id;
     /// let mut id = Id::Name("Carp".into());
     ///

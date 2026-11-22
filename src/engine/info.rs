@@ -487,7 +487,6 @@ impl CurrLine<'static> {
 mod tests {
     use super::Info;
     use crate::engine::{CurrLine, Depth, Refutation, Score, ScoreBound, ScoreWithBound};
-    use pretty_assertions::assert_eq;
     use shakmaty::Color;
     use shakmaty::uci::UciMove;
     use std::borrow::Cow;

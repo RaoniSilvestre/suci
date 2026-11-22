@@ -4,6 +4,7 @@ use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout};
 use std::str::FromStr;
+use tracing::{debug, trace};
 
 /// Communicate with a chess engine.
 ///
@@ -62,6 +63,8 @@ impl Engine<BufReader<ChildStdout>, ChildStdin> {
 
         let stdout = BufReader::new(stdout);
 
+        debug!(target: "suci", "engine initialized");
+
         Ok(Self {
             engine: stdout,
             gui: stdin,
@@ -83,6 +86,7 @@ where
         M: Into<GuiMessage<'a>>,
     {
         let message = message.into();
+        trace!(target: "suci", message = %message, "sent");
         self.gui.write_all((message.to_string() + "\n").as_bytes())
     }
 }
@@ -97,6 +101,8 @@ where
     /// See [`BufRead::read_until`].
     pub fn skip_lines(&mut self, count: usize) -> io::Result<()> {
         let mut buf = Vec::with_capacity(512);
+
+        trace!(target: "suci", count, "skipping lines");
 
         for _ in 0..count {
             let bytes = self.engine.read_until(b'\n', &mut buf)?;
@@ -127,9 +133,18 @@ where
             }
 
             match EngineMessage::from_str(&line) {
-                Ok(message) => return Ok(message),
-                Err(_) if !self.strict => line.clear(),
-                Err(error) => return Err(ReadError::Parse { error, got: line }),
+                Ok(message) => {
+                    trace!(target: "suci", ?message, "received");
+                    return Ok(message);
+                }
+                Err(_) if !self.strict => {
+                    trace!(target: "suci", line = %line, "ignored unrecognized line");
+                    line.clear();
+                }
+                Err(error) => {
+                    trace!(target: "suci", line = %line, "failed to parse line");
+                    return Err(ReadError::Parse { error, got: line });
+                }
             }
         }
     }
@@ -149,21 +164,29 @@ where
         &mut self,
         mut option_receiver: impl FnMut(EngineOption<'static>),
     ) -> Result<Option<Id<'static>>, ReadWriteError> {
+        trace!(target: "suci", "handshake started");
         self.send(crate::Uci).map_err(ReadWriteError::Write)?;
 
         let mut id = None::<Id>;
 
         loop {
             match self.read().map_err(ReadWriteError::Read)? {
-                EngineMessage::Option(option) => option_receiver(option),
+                EngineMessage::Option(option) => {
+                    trace!(target: "suci", ?option, "handshake option");
+                    option_receiver(option);
+                }
                 EngineMessage::Id(new_id) => {
+                    trace!(target: "suci", ?new_id, "handshake id");
                     id = Some(if let Some(id) = id {
                         id.updated(new_id)
                     } else {
                         new_id
                     });
                 }
-                EngineMessage::UciOk(_) => return Ok(id),
+                EngineMessage::UciOk(_) => {
+                    debug!(target: "suci", "handshake complete");
+                    return Ok(id);
+                }
                 _ => (),
             }
         }
@@ -180,12 +203,14 @@ where
         message: &Go,
         mut info_receiver: impl FnMut(Info<'static>),
     ) -> Result<BestMove, ReadWriteError> {
+        trace!(target: "suci", ?message, "go started");
         self.send(message).map_err(ReadWriteError::Write)?;
 
         loop {
             match self.read().map_err(ReadWriteError::Read)? {
                 EngineMessage::Info(info) => info_receiver(*info),
                 EngineMessage::BestMove(best_move) => {
+                    trace!(target: "suci", ?best_move, "go best move");
                     return Ok(best_move);
                 }
                 _ => (),
@@ -196,6 +221,7 @@ where
     #[allow(clippy::missing_errors_doc)]
     /// Sends [`IsReady`](crate::IsReady) and waits for [`ReadyOk`](crate::ReadyOk).
     pub fn is_ready(&mut self) -> Result<(), ReadWriteError> {
+        trace!(target: "suci", "isready");
         self.send(crate::IsReady).map_err(ReadWriteError::Write)?;
 
         loop {
@@ -213,7 +239,6 @@ mod tests {
     use crate::{
         EngineMessage, EngineOption, EngineOptionType, MessageParseErrorKind, NormalBestMove,
     };
-    use pretty_assertions::{assert_eq, assert_matches};
     use shakmaty::uci::UciMove;
     use std::borrow::Cow;
 
@@ -298,7 +323,7 @@ mod tests {
 
         engine.skip_lines(3).unwrap();
 
-        assert_matches!(engine.read().unwrap(), EngineMessage::ReadyOk(_));
+        assert!(matches!(engine.read().unwrap(), EngineMessage::ReadyOk(_)));
     }
 
     #[test]
@@ -355,7 +380,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_matches!(best_move, BestMove::Normal(_));
+        assert!(matches!(best_move, BestMove::Normal(_)));
 
         let best_move = best_move.normal().unwrap();
 

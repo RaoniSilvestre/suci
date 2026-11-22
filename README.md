@@ -29,6 +29,15 @@ No features are enabled by default.
 
 - `serde`: enables serde support for most types. All implementations are derived with no parameters.
 
+## Logging
+SUCI uses [`tracing`](https://crates.io/crates/tracing). The library does not install a subscriber.
+
+- `RUST_LOG=suci=debug` shows engine lifecycle events.
+- `RUST_LOG=suci=trace` shows the full UCI traffic.
+- `RUST_LOG=trace` enables trace-level output for every crate.
+
+The example installs `tracing-subscriber` and honors `RUST_LOG`.
+
 ## MSRV
 Rust 1.99 or newer.
 

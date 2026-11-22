@@ -7,3 +7,4 @@ edition = "2024"
 [dependencies]
 suci = { workspace = true }
 shakmaty = { workspace = true }
+tracing-subscriber = { workspace = true }

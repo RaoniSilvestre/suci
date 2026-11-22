@@ -23,17 +23,16 @@ members = [
 serde = { version = "1.0.197", default-features = false }
 shakmaty = { version = "0.30.3", default-features = false }
 suci = { version = "0.1.0", path = "." }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
-# Enables serde support for most types. All implementations are derived with no parameters.
 serde = ["dep:serde", "serde/alloc", "shakmaty/serde", "shakmaty/alloc"]
 
 [dependencies]
 serde = { workspace = true, optional = true, features = ["derive"] }
 shakmaty = { workspace = true }
-
-[dev-dependencies]
-pretty_assertions = { version = "1.4.1", features = ["unstable"] }
+tracing = { workspace = true }
 
 [lints.rust]
 missing_debug_implementations = "warn"

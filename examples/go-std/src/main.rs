@@ -20,6 +20,10 @@ use std::thread;
 use suci::Engine;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     let mut process = Command::new("stockfish")
         .stdout(Stdio::piped())
         .stdin(Stdio::piped())
