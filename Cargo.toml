@@ -48,9 +48,7 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 must_use_candidate = "allow"
 arithmetic_side_effects = "warn"
-unchecked_time_subtraction = "warn"
 as_conversions = "warn"
-large_futures = "warn"
 large_stack_arrays = "warn"
 large_stack_frames = "warn"
 modulo_one = "warn"
