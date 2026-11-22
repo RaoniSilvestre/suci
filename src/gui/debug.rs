@@ -1,8 +1,8 @@
-use core::fmt::{Display, Formatter};
-use crate::errors::MessageParseError;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::MessageParseErrorKind;
 use super::{pointers, traits};
+use crate::MessageParseErrorKind;
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::errors::MessageParseError;
+use core::fmt::{Display, Formatter};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -32,7 +32,7 @@ from_str_parts!(impl Debug for parts -> Result {
 impl Display for Debug {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("debug ")?;
-        
+
         if self.0 {
             f.write_str("on")
         } else {
@@ -42,14 +42,10 @@ impl Display for Debug {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    extern crate alloc;
-
-    use alloc::string::ToString;
     use super::Debug;
-    use crate::{MessageParseError, MessageParseErrorKind};
     use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str};
+    use crate::{MessageParseError, MessageParseErrorKind};
 
     #[test]
     fn to_from_str_on() {

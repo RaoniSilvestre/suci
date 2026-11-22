@@ -1,6 +1,5 @@
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
-#[cfg(feature = "io")]
 use std::io;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -49,8 +48,6 @@ impl Display for MessageParseError {
 
 impl Error for MessageParseError {}
 
-#[cfg(feature = "io")]
-#[cfg_attr(docsrs, doc(cfg(feature = "io")))]
 #[derive(Debug)]
 /// Reading a message from the engine failed.
 pub enum ReadError {
@@ -64,7 +61,6 @@ pub enum ReadError {
     },
 }
 
-#[cfg(feature = "io")]
 impl Display for ReadError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -76,11 +72,8 @@ impl Display for ReadError {
     }
 }
 
-#[cfg(feature = "io")]
 impl Error for ReadError {}
 
-#[cfg(feature = "io")]
-#[cfg_attr(docsrs, doc(cfg(feature = "io")))]
 #[derive(Debug)]
 /// Reading/sending a message from/to the engine failed.
 pub enum ReadWriteError {
@@ -90,7 +83,6 @@ pub enum ReadWriteError {
     Read(ReadError),
 }
 
-#[cfg(feature = "io")]
 impl Display for ReadWriteError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -100,10 +92,8 @@ impl Display for ReadWriteError {
     }
 }
 
-#[cfg(feature = "io")]
 impl Error for ReadWriteError {}
 
-#[cfg(feature = "io")]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 /// Converting a process to an engine failed.
 pub enum FromProcessError {
@@ -113,7 +103,6 @@ pub enum FromProcessError {
     StdinNotCaptured,
 }
 
-#[cfg(feature = "io")]
 impl Display for FromProcessError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -123,10 +112,9 @@ impl Display for FromProcessError {
     }
 }
 
-#[cfg(feature = "io")]
 impl Error for FromProcessError {}
 
-#[cfg(all(test, feature = "io"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;

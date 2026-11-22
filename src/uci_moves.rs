@@ -1,6 +1,3 @@
-extern crate alloc;
-
-use alloc::vec::Vec;
 use core::fmt::{Display, Formatter, Write};
 use shakmaty::uci::UciMove;
 
@@ -12,16 +9,14 @@ pub fn from_str(s: &str) -> Vec<UciMove> {
 
 /// Just joins the moves with a space.
 pub fn fmt(this: &[UciMove], f: &mut Formatter<'_>) -> core::fmt::Result {
-    let mut first_iter = true;
+    let Some((first, rest)) = this.split_first() else {
+        return Ok(());
+    };
 
-    for r#move in this {
-        // Do not write the space on the first iteration
-        if first_iter {
-            first_iter = false;
-        } else {
-            f.write_char(' ')?;
-        }
+    first.fmt(f)?;
 
+    for r#move in rest {
+        f.write_char(' ')?;
         r#move.fmt(f)?;
     }
 

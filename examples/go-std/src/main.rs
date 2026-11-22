@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
     println!("Received {} infos", infos.len());
     println!("Best move (probably e2g8): {best_move:?}");
 
-    println!("== Sending go again, this time receiving and printing them async");
+    println!("== Sending go again, this time receiving and printing them on a separate thread");
 
     let (info_sender, info_receiver) = mpsc::channel::<ruci::Info>();
 

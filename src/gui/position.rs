@@ -1,26 +1,22 @@
-extern crate alloc;
-
-use alloc::borrow::Cow;
-use alloc::vec::Vec;
-use core::fmt::{Display, Formatter};
-use alloc::string::{String};
-use shakmaty::fen::Fen;
-use shakmaty::uci::UciMove;
-use crate::{parsing, uci_moves, MessageParseErrorKind, OptionReplaceIf};
+use super::{pointers, traits};
 use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::errors::MessageParseError;
-use crate::gui::pointers::{PositionParameterPointer};
-use super::{pointers, traits};
+use crate::gui::pointers::PositionParameterPointer;
+use crate::{MessageParseErrorKind, OptionReplaceIf, parsing, uci_moves};
+use core::fmt::{Display, Formatter};
+use shakmaty::fen::Fen;
+use shakmaty::uci::UciMove;
+use std::borrow::Cow;
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Changes the position to analyze.
 ///
 /// Returns an error when parsing if neither `startpos` nor `fen` parameters are present.
 /// If both are present, the first one takes precedence (because Stockfish and Dragon do it like that).
-/// 
+///
 /// <https://backscattering.de/chess/uci/#gui-position>
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Position<'a> {
     StartPos {
         moves: Cow<'a, [UciMove]>,
@@ -28,7 +24,7 @@ pub enum Position<'a> {
     Fen {
         fen: Cow<'a, Fen>,
         moves: Cow<'a, [UciMove]>,
-    }
+    },
 }
 
 impl Position<'_> {
@@ -37,8 +33,13 @@ impl Position<'_> {
     #[must_use]
     pub fn into_owned(self) -> Position<'static> {
         match self {
-            Self::StartPos { moves } => Position::StartPos { moves: Cow::Owned(moves.into_owned()) },
-            Self::Fen { fen, moves } => Position::Fen { fen: Cow::Owned(fen.into_owned()), moves: Cow::Owned(moves.into_owned()) },
+            Self::StartPos { moves } => Position::StartPos {
+                moves: Cow::Owned(moves.into_owned()),
+            },
+            Self::Fen { fen, moves } => Position::Fen {
+                fen: Cow::Owned(fen.into_owned()),
+                moves: Cow::Owned(moves.into_owned()),
+            },
         }
     }
 }
@@ -106,31 +107,37 @@ impl Display for Position<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use alloc::borrow::Cow;
-    use shakmaty::uci::UciMove;
-    use alloc::string::ToString;
+    use crate::MessageParseErrorKind;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
+    use crate::errors::MessageParseError;
     use crate::gui::Position;
     use shakmaty::fen::Fen;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
-    use crate::errors::MessageParseError;
-    use crate::MessageParseErrorKind;
+    use shakmaty::uci::UciMove;
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str_start_pos() {
-        let moves = [UciMove::from_ascii(b"d2d4").unwrap(), UciMove::from_ascii(b"d7d5").unwrap()];
+        let moves = [
+            UciMove::from_ascii(b"d2d4").unwrap(),
+            UciMove::from_ascii(b"d7d5").unwrap(),
+        ];
         let repr = Position::StartPos {
             moves: Cow::Borrowed(&moves),
         };
 
         assert_message_to_from_str!(
-            gui 
+            gui
             repr,
             "position startpos moves d2d4 d7d5"
         );
 
-        let moves = [UciMove::from_ascii(b"d2d4").unwrap(), UciMove::from_ascii(b"d7d5").unwrap()];
+        let moves = [
+            UciMove::from_ascii(b"d2d4").unwrap(),
+            UciMove::from_ascii(b"d7d5").unwrap(),
+        ];
         let m = Position::StartPos {
             moves: Cow::Borrowed(&moves),
         };
@@ -149,20 +156,24 @@ mod tests {
 
     #[test]
     fn to_from_str_fen() {
-        let fen = Fen::from_ascii(b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5").unwrap();
+        let fen =
+            Fen::from_ascii(b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5")
+                .unwrap();
         let moves = [UciMove::from_ascii(b"b1c3").unwrap()];
         let m = Position::Fen {
             fen: Cow::Borrowed(&fen),
             moves: Cow::Borrowed(&moves),
         };
-        
+
         assert_message_to_from_str!(
-            gui 
+            gui
             m,
             "position fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves b1c3"
         );
 
-        let fen = Fen::from_ascii(b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5").unwrap();
+        let fen =
+            Fen::from_ascii(b"rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5")
+                .unwrap();
         let moves = [UciMove::from_ascii(b"b1c3").unwrap()];
         let m = Position::Fen {
             fen: Cow::Borrowed(&fen),
@@ -180,11 +191,11 @@ mod tests {
             "position fen rnbqk2r/ppppp1bp/5np1/5p2/2PP4/6P1/PP2PPBP/RNBQK1NR w KQkq - 1 5 moves b1c3"
         );
     }
-    
+
     #[test]
     fn invalid_tail() {
         let moves = [UciMove::from_ascii(b"d2d4").unwrap()];
-        
+
         let m = Position::StartPos {
             moves: Cow::Borrowed(&moves),
         };
@@ -204,7 +215,7 @@ mod tests {
     #[test]
     fn parse_error() {
         assert_from_str_message!(
-            gui 
+            gui
             "position moves e2e4",
             Err::<Position, MessageParseError>(MessageParseError {
                 expected: "startpos",

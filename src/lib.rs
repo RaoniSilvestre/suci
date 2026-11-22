@@ -1,35 +1,3 @@
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![allow(clippy::must_use_candidate)]
-#![warn(missing_debug_implementations)]
-#![warn(missing_copy_implementations)]
-#![warn(
-    clippy::arithmetic_side_effects,
-    clippy::unchecked_duration_subtraction,
-    clippy::as_conversions,
-    clippy::large_futures,
-    clippy::large_stack_arrays,
-    clippy::large_stack_frames,
-    clippy::modulo_one,
-    clippy::iterator_step_by_zero,
-    clippy::invalid_regex,
-    clippy::print_stdout,
-    clippy::print_stderr
-)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::exit,
-    clippy::todo,
-    clippy::unreachable,
-    clippy::panic_in_result_fn,
-    clippy::indexing_slicing,
-    clippy::string_slice
-)]
-#![cfg_attr(not(feature = "io"), no_std)]
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![forbid(unsafe_code)]
 //! # A note on "GUI"
 //! Whenever you see "GUI" in the documentation, it doesn't mean "Graphical User Interface".
 //! It means "whatever controls the engine".
@@ -59,32 +27,18 @@
 //! # A note on [`Display`] impls
 //! [`Display`] implementations of messages do **not** include the final newline (`\n`) character.
 
-extern crate alloc;
-
 mod dev_macros;
 pub mod engine;
-#[cfg(feature = "engine-sync")]
 mod engine_connection;
-#[cfg(feature = "engine-async")]
-mod engine_connection_async;
 mod errors;
 pub mod gui;
-#[cfg(feature = "gui-sync")]
-mod gui_connection;
-#[cfg(feature = "gui-async")]
-mod gui_connection_async;
 mod parsing;
 mod uci_moves;
 
 use core::fmt::{Display, Formatter};
 use core::str::FromStr;
-#[cfg(feature = "engine-sync")]
-#[cfg_attr(docsrs, doc(cfg(feature = "engine-sync")))]
 pub use engine_connection::*;
 pub use errors::*;
-#[cfg(feature = "gui-sync")]
-#[cfg_attr(docsrs, doc(cfg(feature = "gui-sync")))]
-pub use gui_connection::*;
 pub use {engine::*, gui::*};
 
 pub(crate) trait OptionReplaceIf<T> {

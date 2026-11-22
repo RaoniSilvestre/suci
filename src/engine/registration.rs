@@ -1,8 +1,8 @@
-use core::fmt::{Display, Formatter};
-use crate::errors::MessageParseError;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::MessageParseErrorKind;
 use super::{pointers, traits};
+use crate::MessageParseErrorKind;
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::errors::MessageParseError;
+use core::fmt::{Display, Formatter};
 
 /// Engine's registration status.
 ///
@@ -39,7 +39,7 @@ from_str_parts!(impl Registration for parts -> Result {
 impl Display for Registration {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("registration ")?;
-        
+
         match self {
             Self::Checking => f.write_str("checking")?,
             Self::Ok => f.write_str("ok")?,
@@ -51,14 +51,12 @@ impl Display for Registration {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    extern crate alloc;
-
-    use alloc::string::ToString;
     use super::Registration;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
     use crate::{MessageParseError, MessageParseErrorKind};
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
 
     #[test]
     fn to_from_str_checking() {

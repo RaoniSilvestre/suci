@@ -1,22 +1,18 @@
-extern crate alloc;
-
-use alloc::borrow::Cow;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
-use core::fmt::{Display, Formatter};
-use core::str::FromStr;
+use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::engine::pointers::OptionParameterPointer;
 use crate::errors::MessageParseError;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::{parsing, MessageParseErrorKind, OptionReplaceIf};
-use super::{pointers, traits};
+use crate::{MessageParseErrorKind, OptionReplaceIf, parsing};
+use core::fmt::{Display, Formatter};
+use core::str::FromStr;
+use std::borrow::Cow;
 
 enum BlankOptionType {
     Check,
     Spin,
     Combo,
     Button,
-    String
+    String,
 }
 
 impl FromStr for BlankOptionType {
@@ -29,7 +25,7 @@ impl FromStr for BlankOptionType {
             "combo" => Ok(Self::Combo),
             "button" => Ok(Self::Button),
             "string" => Ok(Self::String),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -41,7 +37,7 @@ impl Display for BlankOptionType {
             Self::Spin => "spin",
             Self::Combo => "combo",
             Self::Button => "button",
-            Self::String => "string"
+            Self::String => "string",
         })
     }
 }
@@ -56,7 +52,7 @@ pub enum OptionType<'a> {
     /// <https://backscattering.de/chess/uci/#engine-option-type-check>
     Check {
         /// <https://backscattering.de/chess/uci/#engine-option-default>
-        default: StdOption<bool>
+        default: StdOption<bool>,
     },
     /// <https://backscattering.de/chess/uci/#engine-option-type-spin>
     Spin {
@@ -93,11 +89,17 @@ impl OptionType<'_> {
             Self::Spin { default, min, max } => OptionType::Spin { default, min, max },
             Self::Combo { default, var } => OptionType::Combo {
                 default: default.map(Cow::into_owned).map(Cow::Owned),
-                var: Cow::Owned(var.into_owned().into_iter().map(Cow::into_owned).map(Cow::Owned).collect::<Vec<_>>())
+                var: Cow::Owned(
+                    var.into_owned()
+                        .into_iter()
+                        .map(Cow::into_owned)
+                        .map(Cow::Owned)
+                        .collect::<Vec<_>>(),
+                ),
             },
             Self::Button => OptionType::Button,
             Self::String { default } => OptionType::String {
-                default: default.map(Cow::into_owned).map(Cow::Owned)
+                default: default.map(Cow::into_owned).map(Cow::Owned),
             },
         }
     }
@@ -148,7 +150,7 @@ impl Display for OptionType<'_> {
                 if let Some(default) = default {
                     write!(f, " default {default}")?;
                 }
-            },
+            }
         }
 
         Ok(())
@@ -188,7 +190,7 @@ from_str_parts!(impl Option<'_> for parts -> Result {
             OptionParameterPointer::Max => max.replace_if(value.parse().ok()),
             OptionParameterPointer::Var => var.push(Cow::Owned(value.to_string())),
         }
-        
+
         Some(parts)
     };
 
@@ -208,7 +210,7 @@ from_str_parts!(impl Option<'_> for parts -> Result {
             kind: MessageParseErrorKind::MissingParameters
         });
     };
-    
+
     let name = Cow::Owned(name);
 
     match r#type {
@@ -240,11 +242,12 @@ impl Display for Option<'_> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::borrow::Cow;
-    use alloc::string::ToString;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
-    use crate::engine::OptionType;
     use super::Option;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
+    use crate::engine::OptionType;
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str_min_max() {
@@ -254,9 +257,9 @@ mod tests {
                 default: Some(20),
                 min: Some(-10),
                 max: Some(20),
-            }
+            },
         };
-        
+
         assert_from_str_message!(
             engine
             "option name Skill Level type spin type INVALID default 20 min -10 max 20",
@@ -266,9 +269,11 @@ mod tests {
 
         let m = Option {
             name: Cow::Borrowed("Personality"),
-            r#type: OptionType::String { default: Some(Cow::Borrowed("Aggressive")) }
+            r#type: OptionType::String {
+                default: Some(Cow::Borrowed("Aggressive")),
+            },
         };
-        
+
         assert_from_str_message!(
             engine
             "option name Personality type spin type string default Aggressive",
@@ -279,14 +284,20 @@ mod tests {
 
     #[test]
     fn to_from_str_var() {
-        let var = &[Cow::Borrowed("Foo bar fighter"), Cow::Borrowed("Aggressive p"), Cow::Borrowed("Defensive p"), Cow::Borrowed("Positional"), Cow::Borrowed("Endgame")];
-        
+        let var = &[
+            Cow::Borrowed("Foo bar fighter"),
+            Cow::Borrowed("Aggressive p"),
+            Cow::Borrowed("Defensive p"),
+            Cow::Borrowed("Positional"),
+            Cow::Borrowed("Endgame"),
+        ];
+
         let m = Option {
             name: Cow::Borrowed("K Personality"),
             r#type: OptionType::Combo {
                 default: Some(Cow::Borrowed("Default p")),
                 var: Cow::Borrowed(var),
-            }
+            },
         };
         let str_in = "option var Foo bar fighter name K Personality type combo default Default p var Aggressive p var Defensive p var Positional var Endgame";
         // Output has a different order, which is fine, but can't use the same string.
@@ -304,7 +315,7 @@ mod tests {
     fn button() {
         let m = Option {
             name: "Execute   order\t 66".into(),
-            r#type: OptionType::Button
+            r#type: OptionType::Button,
         };
 
         assert_from_str_message!(

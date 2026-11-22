@@ -1,8 +1,8 @@
-use core::fmt::{Display, Formatter};
-use crate::errors::MessageParseError;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::MessageParseErrorKind;
 use super::{pointers, traits};
+use crate::MessageParseErrorKind;
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::errors::MessageParseError;
+use core::fmt::{Display, Formatter};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -37,23 +37,21 @@ from_str_parts!(impl CopyProtection for parts -> Result {
 impl Display for CopyProtection {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("copyprotection ")?;
-        
+
         match self {
             Self::Ok => f.write_str("ok")?,
             Self::Error => f.write_str("error")?,
         }
-        
+
         Ok(())
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::CopyProtection;
-    use alloc::string::ToString;
-    use crate::{MessageParseError, MessageParseErrorKind};
     use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str};
+    use crate::{MessageParseError, MessageParseErrorKind};
 
     #[test]
     fn to_from_str_ok() {

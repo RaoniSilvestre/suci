@@ -2,7 +2,7 @@
 name = "ruci"
 version = "3.0.0-alpha"
 description = "A UCI (Universal Chess Interface) crate."
-categories = ["parser-implementations", "game-development", "no-std"]
+categories = ["parser-implementations", "game-development"]
 keywords = ["chess", "uci", "parser"]
 include = ["src", "README.md", "LICENSE"]
 edition = "2024"
@@ -13,60 +13,57 @@ rust-version = "1.85.1"
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
 members = [
-    "examples/engine",
-    "examples/engine-client",
-    "examples/engine-server",
-    "examples/engine-stdio",
     "examples/go-std",
-    "examples/go-tokio",
 ]
 
 [workspace.dependencies]
 anyhow = { version = "1.0.87", default-features = false }
-dry-mods = { version = "0.1.5", default-features = false }
 paste = { version = "1", default-features = false }
 ruci = { version = "3.0.0-alpha", path = "." }
 serde = { version = "1.0.197", default-features = false }
 shakmaty = { version = "0.29.0", default-features = false }
-tokio = { version = "1.18.2", default-features = false }
 
 [features]
 # Enables serde support for most types. All implementations are derived with no parameters.
 serde = ["dep:serde", "serde/alloc", "shakmaty/serde", "shakmaty/alloc"]
-# Adds types shared by `engine-sync` and `gui-sync`. Requires `std`. Don't enable this yourself.
-io = []
-# Adds the `Engine` struct for communicating with an engine.
-engine-sync = ["io"]
-# Adds async versions of `Engine` functions.
-engine-async = ["engine-sync", "dep:tokio"]
-# Adds a tokio version of `Engine::from_process`.
-tokio-process = ["engine-async", "tokio/process"]
-# Adds the `Gui` struct for communicating with a GUI.
-gui-sync = ["io"]
-# Adds async versions of `Gui` functions.
-gui-async = ["gui-sync", "dep:tokio"]
 
 [dependencies]
-dry-mods = { workspace = true }
 paste = { workspace = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 shakmaty = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["io-util"] }
 
 [dev-dependencies]
 pretty_assertions = { version = "1.4.1", features = ["unstable"] }
-shakmaty-uci = { version = "0.1.1" }
-shakmaty_0_27_3 = { package = "shakmaty", version = "0.27.3", default-features = false }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-trybuild = "1.0.105"
-vampirc-uci = { version = "0.11.1" }
 
-[[bench]]
-name = "to_str"
+[lints.rust]
+missing_debug_implementations = "warn"
+missing_copy_implementations = "warn"
+unsafe_code = "forbid"
 
-[[bench]]
-name = "from_str"
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+arithmetic_side_effects = "warn"
+unchecked_time_subtraction = "warn"
+as_conversions = "warn"
+large_futures = "warn"
+large_stack_arrays = "warn"
+large_stack_frames = "warn"
+modulo_one = "warn"
+iterator_step_by_zero = "warn"
+invalid_regex = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+exit = "deny"
+todo = "deny"
+unreachable = "deny"
+panic_in_result_fn = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"

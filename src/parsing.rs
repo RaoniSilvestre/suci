@@ -1,9 +1,12 @@
-extern crate alloc;
-
 use crate::errors::MessageParseError;
 use crate::{MessageParseErrorKind, MessagePointer};
-use alloc::string::String;
 use core::str::FromStr;
+
+/// Returns the first line of `s`, trimmed.
+fn first_line(s: &str) -> &str {
+    let s = s.trim();
+    s.split_once('\n').map_or(s, |(line, _)| line)
+}
 
 /// Finds the target message and returns the rest of the string, as separated by spaces.
 ///
@@ -16,14 +19,7 @@ pub fn collect_message<'s>(
 where
     MessagePointer: FromStr,
 {
-    let s = s.trim();
-    let s = if let Some((s1, _)) = s.split_once('\n') {
-        s1
-    } else {
-        s
-    };
-
-    let mut parts = s.split(' ');
+    let mut parts = first_line(s).split(' ');
     parts
         .find(|&part| part == target)
         .ok_or(MessageParseError {
@@ -45,14 +41,7 @@ pub fn collect_any_message<'s, M>(
 where
     M: FromStr,
 {
-    let s = s.trim();
-    let s = if let Some((s1, _)) = s.split_once('\n') {
-        s1
-    } else {
-        s
-    };
-
-    let mut parts = s.split(' ');
+    let mut parts = first_line(s).split(' ');
     let message = parts
         .find_map(|part| M::from_str(part).ok())
         .ok_or(MessageParseError {
@@ -100,12 +89,7 @@ where
         }
 
         if let Some(last_parameter) = last_parameter {
-            if let Some(p) = parameter_fn(last_parameter, Some(parameter), value.trim(), parts) {
-                parts = p;
-            } else {
-                return None;
-            }
-
+            parts = parameter_fn(last_parameter, Some(parameter), value.trim(), parts)?;
             value.clear();
         }
 

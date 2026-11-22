@@ -1,16 +1,11 @@
-extern crate alloc;
-
-use alloc::borrow::Cow;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
-use alloc::boxed::Box;
+use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message};
+use crate::engine::pointers::InfoParameterPointer;
+use crate::{OptionReplaceIf, parsing, uci_moves};
 use core::fmt::{Display, Formatter, Write};
 use shakmaty::Color;
 use shakmaty::uci::UciMove;
-use crate::{parsing, uci_moves, OptionReplaceIf};
-use crate::engine::pointers::InfoParameterPointer;
-use crate::dev_macros::{from_str_parts, impl_message};
-use super::{pointers, traits};
+use std::borrow::Cow;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -32,7 +27,7 @@ pub enum ScoreBound {
 }
 
 /// Player advantage/disadvantage from the engine's perspective.
-/// 
+///
 /// <https://backscattering.de/chess/uci/#engine-info-score>
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -48,8 +43,12 @@ impl Score {
     #[allow(clippy::arithmetic_side_effects)]
     pub const fn standardized(self, turn: Color) -> ScoreStandardized {
         match (turn, self) {
-            (Color::White, Self::Centipawns(centipawns)) => ScoreStandardized(Self::Centipawns(centipawns)),
-            (Color::Black, Self::Centipawns(centipawns)) => ScoreStandardized(Self::Centipawns(-centipawns)),
+            (Color::White, Self::Centipawns(centipawns)) => {
+                ScoreStandardized(Self::Centipawns(centipawns))
+            }
+            (Color::Black, Self::Centipawns(centipawns)) => {
+                ScoreStandardized(Self::Centipawns(-centipawns))
+            }
             (Color::White, Self::MateIn(mate_in)) => ScoreStandardized(Self::MateIn(mate_in)),
             (Color::Black, Self::MateIn(mate_in)) => ScoreStandardized(Self::MateIn(-mate_in)),
         }
@@ -72,13 +71,6 @@ impl Score {
 pub struct ScoreStandardized(Score);
 
 impl ScoreStandardized {
-    #[allow(clippy::arithmetic_side_effects)]
-    #[doc(hidden)]
-    #[deprecated(since = "0.8.1", note = "use Score::standardized instead")]
-    pub const fn from_score(score: Score, turn: Color) -> Self {
-        score.standardized(turn)
-    }
-
     pub const fn score(self) -> Score {
         self.0
     }
@@ -96,41 +88,27 @@ pub struct ScoreWithBound {
 
 impl ScoreWithBound {
     fn from_str(s: &str) -> Option<Self> {
-        fn isize_at_plus1_position(split: &[&str], position: Option<usize>) -> Option<isize> {
-            position.and_then(|position| {
-                if position == usize::MAX {
-                    None
-                } else {
-                    // CLIPPY: Potential overflow handled in this if statement
-                    #[allow(clippy::arithmetic_side_effects)]
-                    split
-                        .get(position + 1)
-                        .and_then(|s| s.parse().ok())
-                }
-            })
+        fn value_after(split: &[&str], position: Option<usize>) -> Option<isize> {
+            split
+                .get(position?.checked_add(1)?)
+                .and_then(|s| s.parse().ok())
         }
 
         let split = s.split(' ').collect::<Vec<_>>();
-        let centipawns_position = split.iter().position(|&part| part == "cp");
-        let mate_in_position = split.iter().position(|&part| part == "mate");
-        let is_lowerbound = split.contains(&"lowerbound");
-        let is_upperbound = split.contains(&"upperbound");
-        let centipawns = isize_at_plus1_position(&split, centipawns_position);
-        let mate_in = isize_at_plus1_position(&split, mate_in_position);
-        let kind = centipawns.map_or_else(|| mate_in.map(Score::MateIn), |centipawns| Some(Score::Centipawns(centipawns)))?;
+        let centipawns = value_after(&split, split.iter().position(|&part| part == "cp"));
+        let mate_in = value_after(&split, split.iter().position(|&part| part == "mate"));
+        let kind = match (centipawns, mate_in) {
+            (Some(centipawns), _) => Score::Centipawns(centipawns),
+            (None, Some(mate_in)) => Score::MateIn(mate_in),
+            (None, None) => return None,
+        };
+        let bound = match (split.contains(&"lowerbound"), split.contains(&"upperbound")) {
+            (true, false) => Some(ScoreBound::LowerBound),
+            (false, true) => Some(ScoreBound::UpperBound),
+            _ => None,
+        };
 
-        Some(Self {
-            kind,
-            bound: if is_lowerbound && is_upperbound {
-                None
-            } else if is_lowerbound {
-                Some(ScoreBound::LowerBound)
-            } else if is_upperbound {
-                Some(ScoreBound::UpperBound)
-            } else {
-                None
-            },
-        })
+        Some(Self { kind, bound })
     }
 }
 
@@ -156,17 +134,11 @@ impl Refutation<'_> {
 
 impl Refutation<'static> {
     fn from_str(s: &str) -> Option<Self> {
-        let mut moves = uci_moves::from_str(s);
-
-        if moves.is_empty() {
-            return None;
-        }
-
-        let first = moves.remove(0);
+        let mut moves = uci_moves::from_str(s).into_iter();
 
         Some(Self {
-            refuted_move: first,
-            refutation: Cow::Owned(moves),
+            refuted_move: moves.next()?,
+            refutation: Cow::Owned(moves.collect()),
         })
     }
 }
@@ -284,9 +256,9 @@ impl Info<'_> {
             cpu_load,
             string,
             refutation,
-            curr_line
+            curr_line,
         } = self;
-        
+
         Info {
             depth,
             time,
@@ -488,7 +460,7 @@ impl Display for Info<'_> {
                 f.write_char(' ')?;
                 f.write_str(&used_cpu.to_string())?;
             }
-            
+
             if !current_line.line.is_empty() {
                 f.write_char(' ')?;
                 uci_moves::fmt(&current_line.line, f)?;
@@ -504,16 +476,16 @@ impl Display for Info<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use alloc::borrow::Cow;
-    use alloc::string::ToString;
     use super::Info;
-    use shakmaty::uci::UciMove;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
+    use crate::engine::{CurrLine, Depth, Refutation, Score, ScoreBound, ScoreWithBound};
     use pretty_assertions::assert_eq;
     use shakmaty::Color;
-    use crate::engine::{CurrLine, Depth, Refutation, Score, ScoreBound, ScoreWithBound};
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
+    use shakmaty::uci::UciMove;
+    use std::borrow::Cow;
 
     #[test]
     fn score_kind_standardize() {
@@ -537,14 +509,23 @@ mod tests {
 
     #[test]
     fn to_from_str() {
-        let pv: &[UciMove] = &[UciMove::from_ascii(b"e2e4").unwrap(), UciMove::from_ascii(b"c7c5").unwrap()];
-        let refutation = [UciMove::from_ascii(b"d7d5").unwrap(), UciMove::from_ascii(b"f1g2").unwrap()];
-        let curr_line = [UciMove::from_ascii(b"e2e4").unwrap(), UciMove::from_ascii(b"c7c5").unwrap()];
-        
+        let pv: &[UciMove] = &[
+            UciMove::from_ascii(b"e2e4").unwrap(),
+            UciMove::from_ascii(b"c7c5").unwrap(),
+        ];
+        let refutation = [
+            UciMove::from_ascii(b"d7d5").unwrap(),
+            UciMove::from_ascii(b"f1g2").unwrap(),
+        ];
+        let curr_line = [
+            UciMove::from_ascii(b"e2e4").unwrap(),
+            UciMove::from_ascii(b"c7c5").unwrap(),
+        ];
+
         let m = Info {
             depth: Some(Depth {
                 depth: 20,
-                seldepth: Some(31)
+                seldepth: Some(31),
             }),
             time: Some(12),
             nodes: Some(4),
@@ -571,19 +552,25 @@ mod tests {
                 line: Cow::Borrowed(&curr_line),
             }),
         };
-        
+
         assert_message_to_from_str!(engine m, "info depth 20 seldepth 31 time 12 nodes 4 pv e2e4 c7c5 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 refutation g2g4 d7d5 f1g2 currline 1 e2e4 c7c5 string blabla");
     }
 
     #[test]
     fn to_from_str_bad_parameters() {
-        let refutation = [UciMove::from_ascii(b"d7d5").unwrap(), UciMove::from_ascii(b"f1g2").unwrap()];
-        let curr_line = [UciMove::from_ascii(b"e2e4").unwrap(), UciMove::from_ascii(b"c7c5").unwrap()];
-        
+        let refutation = [
+            UciMove::from_ascii(b"d7d5").unwrap(),
+            UciMove::from_ascii(b"f1g2").unwrap(),
+        ];
+        let curr_line = [
+            UciMove::from_ascii(b"e2e4").unwrap(),
+            UciMove::from_ascii(b"c7c5").unwrap(),
+        ];
+
         let m = Info {
             depth: Some(Depth {
                 depth: 20,
-                seldepth: Some(31)
+                seldepth: Some(31),
             }),
             time: Some(12),
             nodes: Some(4),
@@ -628,12 +615,14 @@ mod tests {
         let m = Info {
             depth: Some(Depth {
                 depth: 13,
-                seldepth: None
+                seldepth: None,
             }),
-            string: Some(Cow::Borrowed("the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound")),
+            string: Some(Cow::Borrowed(
+                "the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound",
+            )),
             ..Default::default()
         };
-        
+
         assert_message_to_from_str!(
             engine
             m,

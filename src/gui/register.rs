@@ -1,13 +1,10 @@
-extern crate alloc;
-
-use alloc::borrow::{Cow, ToOwned};
-use alloc::string::String;
-use core::fmt::{Display, Formatter};
+use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::errors::MessageParseError;
 use crate::gui::pointers::RegisterParameterPointer;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::{parsing, MessageParseErrorKind};
-use super::{pointers, traits};
+use crate::{MessageParseErrorKind, parsing};
+use core::fmt::{Display, Formatter};
+use std::borrow::Cow;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -19,7 +16,10 @@ pub enum Register<'a> {
     Later,
     Name(Cow<'a, str>),
     Code(Cow<'a, str>),
-    NameAndCode { name: Cow<'a, str>, code: Cow<'a, str> },
+    NameAndCode {
+        name: Cow<'a, str>,
+        code: Cow<'a, str>,
+    },
 }
 
 impl Register<'_> {
@@ -34,7 +34,7 @@ impl Register<'_> {
             Self::NameAndCode { name, code } => Register::NameAndCode {
                 name: Cow::Owned(name.into_owned()),
                 code: Cow::Owned(code.into_owned()),
-            }
+            },
         }
     }
 }
@@ -49,7 +49,7 @@ from_str_parts!(impl Register<'_> for parts -> Result {
             RegisterParameterPointer::Name => name = Some(value.to_owned()),
             RegisterParameterPointer::Code => code = Some(value.to_owned()),
         }
-        
+
         Some(parts)
     };
 
@@ -95,22 +95,22 @@ impl Display for Register<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use alloc::borrow::Cow;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
     use crate::gui::Register;
-    use alloc::string::ToString;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {
         let m = Register::NameAndCode {
             name: Cow::Borrowed("john later smith"),
-            code: Cow::Borrowed("31 tango")
+            code: Cow::Borrowed("31 tango"),
         };
-        
+
         assert_message_to_from_str!(
-            gui 
+            gui
             m,
             "register name john later smith code 31 tango"
         );

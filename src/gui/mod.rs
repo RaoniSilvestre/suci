@@ -1,6 +1,14 @@
-dry_mods::mods! {
-    mod pub use go, register, set_option, position, debug;
-}
+mod debug;
+mod go;
+mod position;
+mod register;
+mod set_option;
+
+pub use debug::*;
+pub use go::*;
+pub use position::*;
+pub use register::*;
+pub use set_option::*;
 
 use crate::dev_macros::define_message;
 use crate::errors::MessageParseError;

@@ -1,18 +1,15 @@
-extern crate alloc;
-
-use alloc::string::String;
-use alloc::borrow::{Cow, ToOwned};
-use core::fmt::{Display, Formatter};
+use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
 use crate::engine::pointers::IdParameterPointer;
 use crate::errors::MessageParseError;
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::{parsing, MessageParseErrorKind};
-use super::{pointers, traits};
+use crate::{MessageParseErrorKind, parsing};
+use core::fmt::{Display, Formatter};
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Engine's identification information.
-/// 
+///
 /// Sent after [`Uci`](crate::gui::Uci).
 ///
 /// <https://backscattering.de/chess/uci/#engine-id>
@@ -21,7 +18,10 @@ pub enum Id<'a> {
     Name(Cow<'a, str>),
     /// <https://backscattering.de/chess/uci/#engine-id-author>
     Author(Cow<'a, str>),
-    NameAndAuthor { name: Cow<'a, str>, author: Cow<'a, str> },
+    NameAndAuthor {
+        name: Cow<'a, str>,
+        author: Cow<'a, str>,
+    },
 }
 
 impl Id<'_> {
@@ -38,7 +38,7 @@ impl Id<'_> {
             },
         }
     }
-    
+
     #[must_use]
     /// Returns a new [`Id`] that is updated with values of the `new` parameter.
     ///
@@ -104,10 +104,10 @@ from_str_parts!(impl Id<'_> for parts -> Result {
             IdParameterPointer::Name => name = Some(value.to_owned()),
             IdParameterPointer::Author => author = Some(value.to_owned()),
         }
-        
+
         Some(parts)
     };
-    
+
     let mut value = String::with_capacity(200);
     parsing::apply_parameters(parts, &mut value, parameter_fn);
 
@@ -149,10 +149,11 @@ impl Display for Id<'_> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::borrow::Cow;
     use super::Id;
-    use alloc::string::ToString;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {

@@ -1,15 +1,11 @@
-extern crate alloc;
-
-use alloc::borrow::Cow;
-use alloc::vec::Vec;
-use alloc::string::String;
+use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::gui::pointers::GoParameterPointer;
+use crate::{OptionReplaceIf, parsing, uci_moves};
 use core::fmt::{Display, Formatter};
 use core::num::NonZeroUsize;
 use shakmaty::uci::UciMove;
-use crate::{parsing, uci_moves, OptionReplaceIf};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::gui::pointers::GoParameterPointer;
-use super::{pointers, traits};
+use std::borrow::Cow;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -69,7 +65,7 @@ impl Go<'_> {
             nodes,
             mate,
             move_time,
-            infinite
+            infinite,
         } = self;
 
         Go {
@@ -98,7 +94,7 @@ from_str_parts!(impl Go<'_> for parts -> Self {
         match parameter {
             GoParameterPointer::SearchMoves => {
                 let parsed = uci_moves::from_str(value);
-    
+
                 if !parsed.is_empty() {
                     search_moves = parsed;
                 }
@@ -115,15 +111,15 @@ from_str_parts!(impl Go<'_> for parts -> Self {
             GoParameterPointer::MoveTime => this.move_time.replace_if(value.parse().ok()),
             GoParameterPointer::Infinite => this.infinite = true
         }
-        
+
         Some(parts)
     };
-    
+
     let mut value = String::with_capacity(200);
     parsing::apply_parameters(parts, &mut value, parameter_fn);
 
     this.search_moves = Cow::from(search_moves);
-    
+
     this
 });
 
@@ -179,20 +175,20 @@ impl Display for Go<'_> {
         if self.infinite {
             f.write_str(" infinite")?;
         }
-        
+
         Ok(())
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use alloc::string::ToString;
-    use alloc::borrow::Cow;
-    use shakmaty::uci::UciMove;
-    use core::num::NonZeroUsize;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
     use crate::gui::Go;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
+    use core::num::NonZeroUsize;
+    use shakmaty::uci::UciMove;
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {

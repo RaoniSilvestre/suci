@@ -21,30 +21,28 @@ macro_rules! define_message {
             $(#[$empty_message_attr])*
             #[doc = concat!("\n\n<https://backscattering.de/chess/uci/#", stringify!([< $ident:lower >]), "-", stringify!([< $empty_message_ident:lower >]), ">")]
             pub struct $empty_message_ident;
-            
+
             $crate::dev_macros::impl_message!($empty_message_ident);
             $crate::dev_macros::message_from_impl!([< $ident:lower >] $empty_message_ident);
             $crate::dev_macros::from_str_parts!(impl $empty_message_ident for _parts -> Self  {
                 Self
             });
-            
+
             impl ::core::fmt::Display for $empty_message_ident {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> core::fmt::Result {
                     f.write_str(stringify!([< $empty_message_ident:lower >]))
                 }
             }
         })*
-        
+
         #[cfg(test)]
         mod tests {$(::paste::paste! {
             mod [< $empty_message_ident:snake >] {
-                extern crate alloc;
-                
+
                 use crate::errors::{MessageParseError, MessageParseErrorKind};
                 use super::super::$empty_message_ident;
                 use pretty_assertions::{assert_eq, assert_matches};
                 use core::str::FromStr;
-                use alloc::string::ToString;
 
                 #[test]
                 fn to_from_str() {
@@ -52,7 +50,7 @@ macro_rules! define_message {
                     $crate::dev_macros::assert_from_str_message!([< $ident:lower >] concat!(stringify!([< $empty_message_ident:lower >]), " ddd"), Ok($empty_message_ident));
                     $crate::dev_macros::assert_from_str_message!([< $ident:lower >] concat!("\tggg ", stringify!([< $empty_message_ident:lower >]), " \t f\n\n"), Ok($empty_message_ident));
                 }
-                
+
                 #[test]
                 fn parse_error() {
                     assert_eq!($empty_message_ident::from_str("nope"), Err(MessageParseError {
@@ -70,7 +68,7 @@ macro_rules! define_message {
                 }
             }
         })*}
-        
+
         pub mod traits {
             pub(crate) mod sealed {
                 pub trait Message {}

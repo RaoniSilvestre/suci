@@ -1,20 +1,17 @@
-extern crate alloc;
-
-use alloc::borrow::{Cow, ToOwned};
-use alloc::string::String;
-use core::fmt::{Display, Formatter};
-use crate::errors::MessageParseError;
-use crate::gui::pointers::{SetOptionParameterPointer};
-use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
-use crate::{parsing, MessageParseErrorKind};
 use super::{pointers, traits};
+use crate::dev_macros::{from_str_parts, impl_message, message_from_impl};
+use crate::errors::MessageParseError;
+use crate::gui::pointers::SetOptionParameterPointer;
+use crate::{MessageParseErrorKind, parsing};
+use core::fmt::{Display, Formatter};
+use std::borrow::Cow;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Sets a configuration option ([`Option`](crate::engine::Option)) of the engine.
 /// They are retrieved with [`Uci`](super::Uci).
-/// 
+///
 /// <https://backscattering.de/chess/uci/#gui-setoption>
 pub struct SetOption<'a> {
     pub name: Cow<'a, str>,
@@ -28,7 +25,7 @@ impl SetOption<'_> {
     pub fn into_owned(self) -> SetOption<'static> {
         SetOption {
             name: Cow::Owned(self.name.into_owned()),
-            value: self.value.map(Cow::into_owned).map(Cow::Owned)
+            value: self.value.map(Cow::into_owned).map(Cow::Owned),
         }
     }
 }
@@ -43,10 +40,10 @@ from_str_parts!(impl SetOption<'_> for parts -> Result {
             SetOptionParameterPointer::Name => name = Some(value.to_owned()),
             SetOptionParameterPointer::Value => value_parameter = Some(Cow::Owned(value.to_owned())),
         }
-        
+
         Some(parts)
     };
-    
+
     let mut value = String::with_capacity(200);
     parsing::apply_parameters(parts, &mut value, parameter_fn);
 
@@ -69,12 +66,12 @@ impl Display for SetOption<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use alloc::borrow::Cow;
-    use alloc::string::ToString;
+    use crate::dev_macros::{
+        assert_from_str_message, assert_message_to_from_str, assert_message_to_str,
+    };
     use crate::gui::SetOption;
-    use crate::dev_macros::{assert_from_str_message, assert_message_to_from_str, assert_message_to_str};
+    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {
@@ -82,9 +79,9 @@ mod tests {
             name: Cow::from("Skill Level"),
             value: Some(Cow::from("1")),
         };
-        
+
         assert_message_to_from_str!(
-            gui 
+            gui
             m,
             "setoption name Skill Level value 1"
         );

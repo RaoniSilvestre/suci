@@ -1,14 +1,21 @@
-dry_mods::mods! {
-    mod pub use id, best_move, copy_protection, registration, info, option;
-}
+mod best_move;
+mod copy_protection;
+mod id;
+mod info;
+mod option;
+mod registration;
 
-extern crate alloc;
+pub use best_move::*;
+pub use copy_protection::*;
+pub use id::*;
+pub use info::*;
+pub use option::*;
+pub use registration::*;
 
 use crate::dev_macros::define_message;
 use crate::engine::pointers::MessagePointer;
 use crate::errors::MessageParseError;
 use crate::parsing;
-use alloc::boxed::Box;
 use core::str::FromStr;
 
 define_message! {
