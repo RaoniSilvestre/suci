@@ -14,6 +14,7 @@ rare protocol messages should not leak into the public API without a concrete ne
 ```bash
 cargo fmt --all --check
 cargo test --workspace
+cargo llvm-cov --workspace --summary-only --fail-under-lines 70
 cargo +nightly clippy --workspace --all-targets -- --deny warnings
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo publish --dry-run --allow-dirty
@@ -111,6 +112,7 @@ to examples.
 ## Tests
 
 - Keep tests in `#[cfg(test)]` modules next to the code.
+- Keep line coverage at or above 70%; CI enforces this.
 - Use standard `assert_eq!`, `assert!`, and `matches!`.
 - Do not add test-only helper modules, assertion macros, or `pretty_assertions`.
 - Prefer testing the private `EngineStream` with `&[u8]` and `Vec<u8>`.

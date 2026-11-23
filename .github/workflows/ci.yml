@@ -3,46 +3,38 @@ on: [push, pull_request]
 
 jobs:
   test:
-    strategy:
-      matrix:
-        toolchain:
-          - "1.99" # keep in sync with rust-version in Cargo.toml
-          - "stable"
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain }}
-      - run: cargo test --workspace
+          toolchain: "1.99" # keep in sync with rust-version in Cargo.toml
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
 
-  clippy:
+      - run: cargo +1.99 test --workspace
+      - run: cargo +stable test --workspace
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - run: cargo +stable llvm-cov --workspace --summary-only --fail-under-lines 70
+
+  lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         with:
-          components: clippy
-      - run: cargo clippy --workspace --all-targets -- --deny warnings
-
-  format:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
+          toolchain: stable
           components: rustfmt
-      - run: cargo fmt --all --check
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: clippy
 
-  docs:
-    runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: "-D warnings"
-
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo doc --workspace
+      - run: cargo +stable fmt --all --check
+      - run: cargo +nightly clippy --workspace --all-targets -- --deny warnings
+      - run: RUSTDOCFLAGS="-D warnings" cargo +stable doc --workspace --no-deps

@@ -1,5 +1,4 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/RaoniSilvestre/suci/ci.yml?label=CI)](https://github.com/RaoniSilvestre/suci/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/codecov/c/gh/RaoniSilvestre/suci)](https://app.codecov.io/gh/RaoniSilvestre/suci/)
 [![docs.rs](https://img.shields.io/docsrs/suci?logo=docs.rs&label=docs.rs)](https://docs.rs/suci/)
 [![crates.io](https://img.shields.io/crates/v/suci?logo=rust&label=crates.io)](https://crates.io/crates/suci)
 
