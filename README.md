@@ -74,6 +74,9 @@ UCI has no command for applying a single move, so each turn sends the complete p
 - `Position::StartPos` with the moves played from the initial position.
 - `Position::Fen` with a FEN and any moves played from it.
 
+`Fen` and `UciMove` are re-exported at the crate root, so you do not need a direct
+`shakmaty` dependency to construct positions or moves.
+
 Both examples in [`examples/`](examples) analyze the same positions using the two forms:
 
 ```bash
@@ -107,7 +110,7 @@ SUCI can emit log events through [`tracing`](https://crates.io/crates/tracing) w
 `tracing` feature is enabled. The feature is disabled by default; enable it with:
 
 ```toml
-suci = { version = "0.1", features = ["tracing"] }
+suci = { version = "0.2", features = ["tracing"] }
 ```
 
 ## Fork differences

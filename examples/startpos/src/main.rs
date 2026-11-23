@@ -2,9 +2,8 @@
 //!
 //! Run with `cargo run -p startpos`. Requires that you have installed Stockfish.
 
-use shakmaty::uci::UciMove;
 use std::process::Command;
-use suci::{Engine, Go, Position};
+use suci::{Engine, Go, Position, UciMove};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Spawns the process and performs the UCI handshake once.

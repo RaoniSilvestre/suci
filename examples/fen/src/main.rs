@@ -2,9 +2,8 @@
 //!
 //! Run with `cargo run -p fen`. Requires that you have installed Stockfish.
 
-use shakmaty::fen::Fen;
 use std::process::Command;
-use suci::{Engine, Go, Position};
+use suci::{Engine, Fen, Go, Position};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Spawns the process and performs the UCI handshake once.

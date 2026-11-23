@@ -10,8 +10,7 @@ use shakmaty::uci::UciMove;
 ///
 /// # Example
 /// ```rust
-/// use shakmaty::fen::Fen;
-/// use suci::Position;
+/// use suci::{Fen, Position};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let start = Position::StartPos {

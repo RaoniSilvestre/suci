@@ -74,7 +74,7 @@ Keep the public API limited to what is actually useful. Do not reintroduce:
 Keep dependencies minimal.
 
 - Runtime: `shakmaty`, optional `tracing` behind the `tracing` feature
-- Example: `shakmaty`
+- Examples: `suci` only; `Fen` and `UciMove` are re-exported
 - `tracing` is disabled by default; enable the `tracing` feature to emit logs.
 - No `serde`, `no_std`, async runtime, vendored engines, benchmarks, or
   compile-fail suites.

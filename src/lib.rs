@@ -62,12 +62,13 @@
 //! - [`Position::StartPos`] with the moves played from the initial position.
 //! - [`Position::Fen`] with a FEN and any moves played from that FEN.
 //!
+//! [`Fen`] and [`UciMove`] are re-exported at the crate root, so you do not need a
+//! direct `shakmaty` dependency to construct positions.
+//!
 //! Use [`Engine::set_position`] followed by [`Engine::go`].
 //!
 //! ```rust
-//! # use shakmaty::fen::Fen;
-//! # use shakmaty::uci::UciMove;
-//! # use suci::Position;
+//! # use suci::{Fen, Position, UciMove};
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // The starting position plus the moves played so far.
 //! let from_start = Position::StartPos {
@@ -137,3 +138,5 @@ mod parsing;
 pub use engine::*;
 pub use errors::*;
 pub use message::*;
+pub use shakmaty::fen::Fen;
+pub use shakmaty::uci::UciMove;
