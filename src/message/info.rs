@@ -74,51 +74,81 @@ impl FromStr for InfoParameter {
 
 /// Information about the engine's calculation.
 ///
-/// Sent (probably multiple times) after [`Go`](crate::Go).
+/// Engines send `info` messages while searching. [`Engine::go`](crate::Engine::go) logs them at
+/// `trace` and returns only the final [`BestMove`](crate::BestMove), so this type is useful when
+/// parsing UCI output directly.
+///
+/// # Example
+/// ```rust
+/// use suci::{Info, Score};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let info: Info = "info depth 20 score cp 35 pv e2e4 e7e5".parse()?;
+///
+/// assert_eq!(info.depth.map(|depth| depth.depth), Some(20));
+/// assert_eq!(info.score.map(|score| score.kind), Some(Score::Centipawns(35)));
+/// assert_eq!(info.pv.len(), 2);
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// <https://backscattering.de/chess/uci/#engine-info>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Info<'a> {
+    /// The search depth and optional selective depth.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-depth>
     pub depth: Option<Depth>,
+    /// The elapsed search time in milliseconds.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-time>
     pub time: Option<usize>,
+    /// The number of nodes searched.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-nodes>
     pub nodes: Option<usize>,
-    /// Primary variation.
+    /// The principal variation: the line the engine expects to be best.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-pv>
     pub pv: Cow<'a, [UciMove]>,
-    /// Multi primary variation.
+    /// The index of this line when multi-PV is enabled, starting at 1.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-multipv>
     pub multi_pv: Option<usize>,
+    /// The engine's evaluation of the position.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score>
     pub score: Option<ScoreWithBound>,
-    /// Current move.
+    /// The move currently being searched at the root.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-currmove>
     pub curr_move: Option<UciMove>,
-    /// Current move number.
+    /// The ordinal number of `curr_move` at the root, starting at 1.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-currmovenumber>
     pub curr_move_number: Option<usize>,
+    /// Transposition-table usage in permill (0 to 1000).
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-hashfull>
     pub hash_full: Option<usize>,
-    /// Nodes per second.
+    /// The search speed in nodes per second.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-nps>
     pub nps: Option<usize>,
-    /// Tablebase hits.
+    /// The number of tablebase hits.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-tbhits>
     pub tb_hits: Option<usize>,
-    /// Shredderbase hits.
+    /// The number of Shredderbase hits.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-sbhits>
     pub sb_hits: Option<usize>,
+    /// The engine's CPU load in permill (0 to 1000).
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-cpuload>
     pub cpu_load: Option<usize>,
+    /// Free-form text from the engine.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-string>
     pub string: Option<Cow<'a, str>>,
 }
@@ -342,38 +372,62 @@ impl Display for Info<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+/// The depth reached by an engine's search.
+///
 /// <https://backscattering.de/chess/uci/#engine-info-depth>
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Depth {
+    /// The completed search depth in plies.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-depth>
     pub depth: usize,
+    /// The selective search depth in plies, if the engine reports one.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-seldepth>
     pub seldepth: Option<usize>,
 }
 
+/// Whether a score is a lower bound or an upper bound.
+///
+/// Engines use bounds when they stop searching before the score is exact.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ScoreBound {
+    /// The real score is at least the reported score.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score-lowerbound>
     LowerBound,
+    /// The real score is at most the reported score.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score-upperbound>
     UpperBound,
 }
 
-/// Player advantage/disadvantage from the engine's perspective.
+/// Player advantage or disadvantage from the engine's perspective.
 ///
 /// <https://backscattering.de/chess/uci/#engine-info-score>
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Score {
+    /// A score in centipawns, where 100 is roughly one pawn.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score-centipawns>
     Centipawns(isize),
+    /// A forced mate in this many moves.
+    ///
+    /// A positive value means the engine delivers mate; a negative value means it is mated.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score-mate>
     MateIn(isize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+/// A score together with its optional bound.
+///
 /// <https://backscattering.de/chess/uci/#engine-info-score>
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ScoreWithBound {
+    /// The score itself.
     pub kind: Score,
+    /// Whether the score is a lower or upper bound, if the engine reported one.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-info-score-lowerbound>
     /// <https://backscattering.de/chess/uci/#engine-info-score-upperbound>
     pub bound: Option<ScoreBound>,

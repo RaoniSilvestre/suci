@@ -27,6 +27,7 @@ shakmaty = { workspace = true }
 tracing = { workspace = true }
 
 [lints.rust]
+missing_docs = "warn"
 missing_debug_implementations = "warn"
 missing_copy_implementations = "warn"
 unsafe_code = "forbid"

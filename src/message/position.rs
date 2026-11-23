@@ -3,22 +3,56 @@ use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
 use std::borrow::Cow;
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Changes the position to analyze.
 ///
+/// UCI has no command that applies a single move. Each turn sends the complete position, either
+/// as the initial position plus a move history or as a FEN plus a move history. Pass the result
+/// to [`Engine::set_position`](crate::Engine::set_position).
+///
+/// # Example
+/// ```rust
+/// use shakmaty::fen::Fen;
+/// use std::borrow::Cow;
+/// use suci::Position;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let start = Position::StartPos {
+///     moves: Cow::Borrowed(&[]),
+/// };
+/// assert_eq!(start.to_string(), "position startpos");
+///
+/// let fen = Fen::from_ascii(b"4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")?;
+/// let position = Position::Fen {
+///     fen: Cow::Owned(fen),
+///     moves: Cow::Borrowed(&[]),
+/// };
+/// assert!(position.to_string().starts_with("position fen 4k3/8/8/8/8/8/4P3/4K3"));
+/// # Ok(())
+/// # }
+/// ```
+///
 /// <https://backscattering.de/chess/uci/#gui-position>
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Position<'a> {
+    /// The initial chess position, followed by a list of moves.
     StartPos {
+        /// Moves played from the initial position, in UCI long algebraic notation such as
+        /// `e2e4`.
         moves: Cow<'a, [UciMove]>,
     },
+    /// A position given as a FEN, followed by a list of moves.
     Fen {
+        /// The position from which `moves` starts.
         fen: Cow<'a, Fen>,
+        /// Moves played from `fen`, in UCI long algebraic notation such as `e2e4`.
         moves: Cow<'a, [UciMove]>,
     },
 }
 
 impl Position<'_> {
+    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
+    /// The resulting value has a `'static` lifetime.
+    #[must_use]
     pub fn into_owned(self) -> Position<'static> {
         match self {
             Self::StartPos { moves } => Position::StartPos {

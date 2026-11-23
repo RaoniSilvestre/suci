@@ -2,12 +2,14 @@ use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use std::io;
 
-/// Something went wrong with parsing a message.
+/// Parsing a UCI message failed.
 ///
-/// Note that the parsing is very liberal and ignores errors unless they're critical.
+/// Parsing is deliberately liberal and ignores errors unless they are critical.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MessageParseError {
+    /// A description of the message or parameter that was expected.
     pub expected: &'static str,
+    /// The kind of parse failure.
     pub kind: MessageParseErrorKind,
 }
 
@@ -34,6 +36,7 @@ impl Display for MessageParseError {
 
 impl Error for MessageParseError {}
 
+/// The kind of UCI parse error.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum MessageParseErrorKind {
     /// No message in the string was found.
@@ -46,13 +49,14 @@ pub enum MessageParseErrorKind {
     ValueParseError,
 }
 
-#[derive(Debug)]
 /// Reading a message from the engine failed.
+#[derive(Debug)]
 pub enum ReadError {
     /// Reading failed due to an I/O error.
     Io(io::Error),
     /// Reading succeeded but parsing the engine response failed.
     Parse {
+        /// The parse error.
         error: MessageParseError,
         /// The erroneous string. Includes the newline character (`\n`).
         got: String,
@@ -72,8 +76,8 @@ impl Display for ReadError {
 
 impl Error for ReadError {}
 
+/// Reading or sending a message from or to the engine failed.
 #[derive(Debug)]
-/// Reading/sending a message from/to the engine failed.
 pub enum ReadWriteError {
     /// Sending a message failed due to an I/O error.
     Write(io::Error),
@@ -92,8 +96,8 @@ impl Display for ReadWriteError {
 
 impl Error for ReadWriteError {}
 
+/// Capturing a child process's stdin or stdout failed.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-/// Converting a process to an engine failed.
 pub enum FromProcessError {
     /// See [`Child.stdout`](std::process::Child#structfield.stdout).
     StdoutNotCaptured,
@@ -112,8 +116,8 @@ impl Display for FromProcessError {
 
 impl Error for FromProcessError {}
 
+/// Starting an engine process or its UCI handshake failed.
 #[derive(Debug)]
-/// Starting an engine process failed.
 pub enum EngineStartError {
     /// The process could not be spawned.
     Spawn(io::Error),

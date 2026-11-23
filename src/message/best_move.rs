@@ -4,21 +4,37 @@ use core::fmt::{Display, Formatter};
 use core::str::{FromStr, Split};
 use shakmaty::uci::UciMove;
 
+/// The engine's best move, or an unparseable `bestmove` response.
+///
+/// [`Engine::go`](crate::Engine::go) returns this when the engine finishes searching.
+///
+/// # Example
+/// ```rust
+/// use suci::BestMove;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let best_move: BestMove = "bestmove e2e4 ponder c7c5".parse()?;
+///
+/// if let Some(normal) = best_move.normal() {
+///     assert_eq!(normal.movement.to_string(), "e2e4");
+///     assert_eq!(normal.ponder.map(|movement| movement.to_string()), Some("c7c5".to_owned()));
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum BestMove {
-    /// This variant exists because engines can send "valid" [`BestMove`] messages, which will fail to parse.
+    /// A `bestmove` response whose move could not be parsed.
     ///
-    /// For example, this happens with Stockfish when trying to analyze a game over position, it will send back `bestmove (none)`.
-    /// However, Komodo Dragon sends back a null move; `bestmove 0000`.
+    /// Engines can send a syntactically valid `bestmove` message without a usable move. Stockfish
+    /// sends `bestmove (none)` at game over, while Komodo Dragon sends the null move
+    /// `bestmove 0000`. This variant records that the `bestmove` line was received even though
+    /// the move was not understood.
     ///
-    /// This variant just means that the `bestmove` string
-    /// was encountered, but the rest of the message was not understood.
-    ///
-    /// The [`Display`] impl of this variant is just `"bestmove"`.
-    ///
-    /// This case is not covered by the protocol description, which is why this solution
-    /// is improvised and isn't great.
+    /// The protocol does not define this case. Its [`Display`] implementation is just
+    /// `"bestmove"`.
     Other,
+    /// A normal UCI move, optionally with a move to ponder.
     Normal(NormalBestMove),
 }
 
@@ -63,14 +79,16 @@ impl FromStr for BestMove {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 /// The engine's best move, with an optional pondering move.
 ///
 /// Sent after [`Go`](crate::Go) is received and calculation is finished.
 ///
 /// <https://backscattering.de/chess/uci/#engine-bestmove>
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NormalBestMove {
+    /// The move chosen by the engine.
     pub movement: UciMove,
+    /// The move the engine suggests pondering, if provided.
     pub ponder: Option<UciMove>,
 }
 

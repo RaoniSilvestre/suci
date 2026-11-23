@@ -22,19 +22,46 @@ impl FromStr for IdParameter {
     }
 }
 
-/// Engine's identification information.
+/// The engine's identification.
 ///
-/// Sent during the UCI handshake.
+/// Engines may send the name and author in separate `id` messages. The handshake combines them
+/// into [`Id::NameAndAuthor`] when both are present. The result is available through
+/// [`Engine::id`](crate::Engine::id).
+///
+/// # Example
+/// ```rust
+/// use suci::Id;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let id: Id = "id name Stockfish 19 author the Stockfish developers".parse()?;
+///
+/// assert_eq!(
+///     id,
+///     Id::NameAndAuthor {
+///         name: "Stockfish 19".into(),
+///         author: "the Stockfish developers".into(),
+///     }
+/// );
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// <https://backscattering.de/chess/uci/#engine-id>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Id<'a> {
+    /// The engine's name.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-id-name>
     Name(Cow<'a, str>),
+    /// The engine's author.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-id-author>
     Author(Cow<'a, str>),
+    /// Both the engine's name and author.
     NameAndAuthor {
+        /// The engine's name.
         name: Cow<'a, str>,
+        /// The engine's author.
         author: Cow<'a, str>,
     },
 }

@@ -31,15 +31,39 @@ impl FromStr for OptionParameter {
     }
 }
 
-/// Engine configuration option.
+/// An engine configuration option.
 ///
-/// Sent during the UCI handshake.
+/// Engines advertise their options during the UCI handshake. The resulting list is available
+/// through [`Engine::options`](crate::Engine::options). To set an option, send a
+/// [`SetOption`](crate::SetOption) with the option's name and value.
+///
+/// # Example
+/// ```rust
+/// use suci::{EngineOption, EngineOptionType};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let option: EngineOption =
+///     "option name Hash type spin default 16 min 1 max 33554432".parse()?;
+///
+/// assert_eq!(option.name, "Hash");
+/// assert!(matches!(
+///     option.option_type,
+///     EngineOptionType::Spin {
+///         default: Some(16),
+///         min: Some(1),
+///         max: Some(33_554_432),
+///     }
+/// ));
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// <https://backscattering.de/chess/uci/#engine-option>
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EngineOption<'a> {
+    /// The option name, as used by [`SetOption`](crate::SetOption).
     pub name: Cow<'a, str>,
+    /// The option type and its default, range, or allowed values.
     pub option_type: EngineOptionType<'a>,
 }
 
@@ -136,37 +160,60 @@ impl Display for EngineOption<'_> {
     }
 }
 
-/// Type of an engine [`EngineOption`].
+/// The type of an engine [`EngineOption`].
 ///
 /// <https://backscattering.de/chess/uci/#engine-option-type>
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EngineOptionType<'a> {
+    /// A boolean option.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-option-type-check>
     Check {
+        /// The default value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-default>
         default: Option<bool>,
     },
+    /// An integer option with an optional range.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-option-type-spin>
     Spin {
+        /// The default value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-default>
         default: Option<i64>,
+        /// The minimum allowed value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-min>
         min: Option<i64>,
+        /// The maximum allowed value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-max>
         max: Option<i64>,
     },
+    /// A string option restricted to a set of allowed values.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-option-type-combo>
     Combo {
+        /// The default value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-default>
         default: Option<Cow<'a, str>>,
+        /// The allowed values.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-var>
         var: Cow<'a, [Cow<'a, str>]>,
     },
+    /// A button that runs an action when pressed.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-option-type-button>
     Button,
+    /// A free-form string option.
+    ///
     /// <https://backscattering.de/chess/uci/#engine-option-type-string>
     String {
+        /// The default value, if the engine reports one.
+        ///
         /// <https://backscattering.de/chess/uci/#engine-option-default>
         default: Option<Cow<'a, str>>,
     },
