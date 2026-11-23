@@ -1,17 +1,33 @@
-use super::pointers::IdParameterPointer;
 use crate::errors::MessageParseError;
 use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
 use core::str::{FromStr, Split};
 use std::borrow::Cow;
 
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+enum IdParameter {
+    Name,
+    Author,
+}
+
+impl FromStr for IdParameter {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "name" => Ok(Self::Name),
+            "author" => Ok(Self::Author),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Engine's identification information.
 ///
-/// Sent after [`Uci`](crate::gui::Uci).
+/// Sent during the UCI handshake.
 ///
 /// <https://backscattering.de/chess/uci/#engine-id>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Id<'a> {
     /// <https://backscattering.de/chess/uci/#engine-id-name>
     Name(Cow<'a, str>),
@@ -45,7 +61,7 @@ impl Id<'_> {
     ///
     /// # Examples
     /// ```rust
-    /// # use suci::engine::Id;
+    /// # use suci::Id;
     /// let mut id = Id::Name("Carp".into());
     ///
     /// id = id.updated(Id::Name("Salmon".into()));
@@ -98,8 +114,8 @@ impl Id<'_> {
         let mut author = None::<String>;
         let parameter_fn = |parameter, _, value: &str, parts| {
             match parameter {
-                IdParameterPointer::Name => name = Some(value.to_owned()),
-                IdParameterPointer::Author => author = Some(value.to_owned()),
+                IdParameter::Name => name = Some(value.to_owned()),
+                IdParameter::Author => author = Some(value.to_owned()),
             }
 
             Some(parts)
@@ -108,23 +124,17 @@ impl Id<'_> {
         let mut value = String::with_capacity(200);
         parsing::apply_parameters(parts, &mut value, parameter_fn);
 
-        #[allow(clippy::option_if_let_else)]
-        if let Some(name) = name {
-            if let Some(author) = author {
-                Ok(Self::NameAndAuthor {
-                    name: Cow::Owned(name),
-                    author: Cow::Owned(author),
-                })
-            } else {
-                Ok(Self::Name(Cow::Owned(name)))
-            }
-        } else if let Some(author) = author {
-            Ok(Self::Author(Cow::Owned(author)))
-        } else {
-            Err(MessageParseError {
+        match (name, author) {
+            (Some(name), Some(author)) => Ok(Self::NameAndAuthor {
+                name: Cow::Owned(name),
+                author: Cow::Owned(author),
+            }),
+            (Some(name), None) => Ok(Self::Name(Cow::Owned(name))),
+            (None, Some(author)) => Ok(Self::Author(Cow::Owned(author))),
+            (None, None) => Err(MessageParseError {
                 expected: "name or author",
                 kind: MessageParseErrorKind::MissingParameters,
-            })
+            }),
         }
     }
 }

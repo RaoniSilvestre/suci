@@ -52,29 +52,29 @@ where
 /// Applies a closure to all parameters and their values.
 ///
 /// `parameter_fn` accepts these parameters:
-/// - `ParameterPointer`: the pointer associated with the passed in value.
-/// - `Option<ParameterPointer>`: the next parameter, if there is one.
+/// - `Parameter`: the parameter kind associated with the passed in value.
+/// - `Option<Parameter>`: the next parameter, if there is one.
 /// - `Split<char>`: the parts that this function parses. You should return these, as is given
 ///   by the `parameter_fn` signature, unless you want to stop parsing. In that case, return `None`
 ///   and keep the parts to yourself.
-pub fn apply_parameters<'p, 'v, ParameterPointer>(
+pub fn apply_parameters<'p, 'v, Parameter>(
     mut parts: core::str::Split<'p, char>,
     value: &'v mut String,
     mut parameter_fn: impl FnMut(
-        ParameterPointer,
-        Option<ParameterPointer>,
+        Parameter,
+        Option<Parameter>,
         &str,
         core::str::Split<'p, char>,
     ) -> Option<core::str::Split<'p, char>>,
 ) -> Option<&'v str>
 where
-    ParameterPointer: FromStr + Copy,
+    Parameter: FromStr + Copy,
 {
     let mut first_parameter_encountered = false;
     let mut last_parameter = None;
 
     while let Some(part) = parts.next() {
-        let Ok(parameter) = ParameterPointer::from_str(part) else {
+        let Ok(parameter) = Parameter::from_str(part) else {
             value.push_str(part);
             value.push(' ');
             continue;

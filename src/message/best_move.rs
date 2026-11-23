@@ -1,12 +1,10 @@
 use crate::errors::MessageParseError;
 use crate::parsing;
-use crate::{EngineMessage, OptionReplaceIf, UciMessage};
 use core::fmt::{Display, Formatter};
 use core::str::{FromStr, Split};
 use shakmaty::uci::UciMove;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BestMove {
     /// This variant exists because engines can send "valid" [`BestMove`] messages, which will fail to parse.
     ///
@@ -36,22 +34,22 @@ impl BestMove {
     }
 
     pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Self {
-        let mut r#move = None;
+        let mut movement = None;
         let mut ponder_encountered = false;
         let mut ponder = None;
 
         for part in parts {
             if ponder_encountered {
-                ponder.replace_if(part.parse().ok());
+                ponder = part.parse().ok().or(ponder);
             } else if part.trim() == "ponder" {
                 ponder_encountered = true;
             } else {
-                r#move.replace_if(part.parse().ok());
+                movement = part.parse().ok().or(movement);
             }
         }
 
-        r#move.map_or(Self::Other, |r#move| {
-            Self::Normal(NormalBestMove { r#move, ponder })
+        movement.map_or(Self::Other, |movement| {
+            Self::Normal(NormalBestMove { movement, ponder })
         })
     }
 }
@@ -66,32 +64,19 @@ impl FromStr for BestMove {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// The engine's best move, with an optional pondering move.
 ///
-/// Sent after [`Go`](crate::gui::Go) is received and calculation is finished.
+/// Sent after [`Go`](crate::Go) is received and calculation is finished.
 ///
 /// <https://backscattering.de/chess/uci/#engine-bestmove>
 pub struct NormalBestMove {
-    pub r#move: UciMove,
+    pub movement: UciMove,
     pub ponder: Option<UciMove>,
 }
 
 impl From<NormalBestMove> for BestMove {
     fn from(value: NormalBestMove) -> Self {
         Self::Normal(value)
-    }
-}
-
-impl From<NormalBestMove> for UciMessage<'_> {
-    fn from(value: NormalBestMove) -> Self {
-        Self::Engine(EngineMessage::BestMove(value.into()))
-    }
-}
-
-impl From<NormalBestMove> for EngineMessage<'_> {
-    fn from(value: NormalBestMove) -> Self {
-        Self::BestMove(value.into())
     }
 }
 
@@ -102,7 +87,7 @@ impl Display for BestMove {
         match &self {
             Self::Other => Ok(()),
             Self::Normal(best_move) => {
-                write!(f, " {}", best_move.r#move)?;
+                write!(f, " {}", best_move.movement)?;
 
                 best_move
                     .ponder
@@ -121,7 +106,7 @@ mod tests {
     #[test]
     fn to_from_str() {
         let m: BestMove = NormalBestMove {
-            r#move: UciMove::from_ascii(b"e2e4").unwrap(),
+            movement: UciMove::from_ascii(b"e2e4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
         }
         .into();
@@ -130,7 +115,7 @@ mod tests {
         assert_eq!("bestmove e2e4 ponder c7c5".parse::<BestMove>(), Ok(m));
 
         let m: BestMove = NormalBestMove {
-            r#move: UciMove::from_ascii(b"d2d4").unwrap(),
+            movement: UciMove::from_ascii(b"d2d4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
         }
         .into();
@@ -145,7 +130,7 @@ mod tests {
     #[test]
     fn to_from_str_bad_value() {
         let m: BestMove = NormalBestMove {
-            r#move: UciMove::from_ascii(b"e2e4").unwrap(),
+            movement: UciMove::from_ascii(b"e2e4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
         }
         .into();

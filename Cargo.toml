@@ -11,26 +11,18 @@ license = "GPL-3.0-only"
 repository = "https://github.com/RaoniSilvestre/suci"
 rust-version = "1.99"
 
-[package.metadata.docs.rs]
-all-features = true
-
 [workspace]
 members = [
-    "examples/go-std",
+    "examples/fen",
+    "examples/startpos",
 ]
 
 [workspace.dependencies]
-serde = { version = "1.0.197", default-features = false }
 shakmaty = { version = "0.30.3", default-features = false }
 suci = { version = "0.1.0", path = "." }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[features]
-serde = ["dep:serde", "serde/alloc", "shakmaty/serde", "shakmaty/alloc"]
 
 [dependencies]
-serde = { workspace = true, optional = true, features = ["derive"] }
 shakmaty = { workspace = true }
 tracing = { workspace = true }
 

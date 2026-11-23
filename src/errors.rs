@@ -6,7 +6,6 @@ use std::io;
 ///
 /// Note that the parsing is very liberal and ignores errors unless they're critical.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MessageParseError {
     pub expected: &'static str,
     pub kind: MessageParseErrorKind,
@@ -36,7 +35,6 @@ impl Display for MessageParseError {
 impl Error for MessageParseError {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MessageParseErrorKind {
     /// No message in the string was found.
     NoMessage,
@@ -53,7 +51,7 @@ pub enum MessageParseErrorKind {
 pub enum ReadError {
     /// Reading failed due to an I/O error.
     Io(io::Error),
-    /// Reading succeeded but parsing to an [`EngineMessage`](crate::EngineMessage) failed.
+    /// Reading succeeded but parsing the engine response failed.
     Parse {
         error: MessageParseError,
         /// The erroneous string. Includes the newline character (`\n`).
@@ -113,6 +111,29 @@ impl Display for FromProcessError {
 }
 
 impl Error for FromProcessError {}
+
+#[derive(Debug)]
+/// Starting an engine process failed.
+pub enum EngineStartError {
+    /// The process could not be spawned.
+    Spawn(io::Error),
+    /// The process's stdin/stdout could not be captured.
+    Pipes(FromProcessError),
+    /// The UCI handshake failed.
+    Handshake(ReadWriteError),
+}
+
+impl Display for EngineStartError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spawn(e) => write!(f, "failed to spawn UCI engine: {e}"),
+            Self::Pipes(e) => write!(f, "failed to capture UCI engine pipes: {e}"),
+            Self::Handshake(e) => write!(f, "UCI handshake failed: {e}"),
+        }
+    }
+}
+
+impl Error for EngineStartError {}
 
 #[cfg(test)]
 mod tests {

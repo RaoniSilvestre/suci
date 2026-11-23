@@ -1,0 +1,9 @@
+[package]
+name = "fen"
+publish = false
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+suci = { workspace = true }
+shakmaty = { workspace = true }
