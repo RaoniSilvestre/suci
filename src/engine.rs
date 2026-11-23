@@ -287,7 +287,8 @@ impl Engine {
     /// Sends [`Go`] and waits for the engine's [`BestMove`].
     ///
     /// This call blocks until the engine sends `bestmove`. Received
-    /// [`Info`](crate::Info) messages are logged at `trace`.
+    /// [`Info`](crate::Info) messages are logged at `trace` when the `tracing`
+    /// feature is enabled.
     ///
     /// <https://backscattering.de/chess/uci/#gui-go>
     ///

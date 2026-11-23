@@ -14,9 +14,11 @@ rare protocol messages should not leak into the public API without a concrete ne
 ```bash
 cargo fmt --all --check
 cargo test --workspace
-cargo llvm-cov --workspace --summary-only --fail-under-lines 70
+cargo test --workspace --all-features
+cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 70
 cargo +nightly clippy --workspace --all-targets -- --deny warnings
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo +nightly clippy --workspace --all-targets --all-features -- --deny warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo publish --dry-run --allow-dirty
 cargo run -p fen
 cargo run -p startpos
@@ -62,8 +64,8 @@ Keep the public API limited to what is actually useful. Do not reintroduce:
   `ponder_hit`, `quit`, `wait_until_ready`.
 - `quit` consumes the engine, sends `quit`, and waits for the process to exit.
   Dropping the engine is the fallback shutdown path and kills/reaps the process.
-- `go` returns `BestMove`; `Info` messages are currently logged at `trace`, not
-  exposed through the public API.
+- `go` returns `BestMove`; `Info` messages are logged at `trace` when the
+  `tracing` feature is enabled, and are not exposed through the public API.
 - If a future feature needs live `Info` access, add a clearly named API and discuss
   it first rather than exposing the raw message enum.
 

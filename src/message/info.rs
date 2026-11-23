@@ -49,8 +49,8 @@ impl FromStr for InfoParameter {
 /// Information about the engine's calculation.
 ///
 /// Engines send `info` messages while searching. [`Engine::go`](crate::Engine::go) logs them at
-/// `trace` and returns only the final [`BestMove`](crate::BestMove), so this type is useful when
-/// parsing UCI output directly.
+/// `trace` when the `tracing` feature is enabled and returns only the final
+/// [`BestMove`](crate::BestMove), so this type is useful when parsing UCI output directly.
 ///
 /// # Example
 /// ```rust

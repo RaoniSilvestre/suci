@@ -115,7 +115,7 @@ suci = { version = "0.1", features = ["tracing"] }
 - Synchronous `Engine` only.
 - No `no_std`, async, or engine-side `Gui` struct.
 - No public raw message enums, `send`, or `read`.
-- No internal macros or sealed message traits.
+- No message-generation macros or sealed message traits.
 - No vendored engines, benchmark harness, or compile-fail suite.
 
 ## MSRV
