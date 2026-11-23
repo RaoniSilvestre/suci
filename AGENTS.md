@@ -28,7 +28,7 @@ The example requires `stockfish` on `PATH`.
 - `src/engine.rs`
   - public `Engine`
   - public `UciInfo`
-  - process ownership, spawning, handshake, lifecycle (`wait`, `kill`, `Drop`)
+  - process ownership, spawning, handshake, lifecycle (`quit`, `Drop`)
   - private `EngineStream<E, G>` used to keep protocol I/O testable
 - `src/message/`
   - public command and response types
@@ -56,7 +56,9 @@ Keep the public API limited to what is actually useful. Do not reintroduce:
 - `Engine::spawn(Command)` performs the UCI handshake and returns a ready engine.
 - Keep `id()` and `options()` available from the handshake result.
 - Commands use methods: `set_position`, `set_option`, `go`, `new_game`, `stop`,
-  `ponder_hit`, `quit`, `wait_until_ready`, `wait`, `kill`.
+  `ponder_hit`, `quit`, `wait_until_ready`.
+- `quit` consumes the engine, sends `quit`, and waits for the process to exit.
+  Dropping the engine is the fallback shutdown path and kills/reaps the process.
 - `go` returns `BestMove`; `Info` messages are currently logged at `trace`, not
   exposed through the public API.
 - If a future feature needs live `Info` access, add a clearly named API and discuss

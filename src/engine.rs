@@ -1,25 +1,71 @@
-use crate::errors::{EngineStartError, ReadError, ReadWriteError};
-use crate::message::Response;
-use crate::{BestMove, EngineOption, Go, Id, Position, SetOption};
+use crate::errors::{EngineStartError, MessageParseError, ReadError, ReadWriteError};
+use crate::parsing;
+use crate::{BestMove, EngineOption, Go, Id, Info, Position, SetOption};
 use core::fmt::Display;
 use std::io;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::str::FromStr;
 use tracing::{debug, trace};
 
 /// Communicate with a chess engine.
 ///
 /// [`Engine::spawn`] starts the process, captures its stdin/stdout, and performs the UCI
-/// handshake. The engine owns the process and kills and reaps it when dropped.
+/// handshake. The engine owns the process for its entire lifetime; there is no public way to
+/// detach it or to keep using the engine after shutdown.
 ///
-/// # Important warning
-/// UCI engines do not always follow the protocol completely. If an engine sends a line that
-/// cannot be parsed, [`Engine::go`] and [`Engine::wait_until_ready`] can fail or hang unless
-/// strict mode is disabled with [`Engine::set_strict`].
+/// A session normally looks like this:
+///
+/// 1. Spawn the engine once with [`Engine::spawn`].
+/// 2. Start a game with [`Engine::new_game`].
+/// 3. Send a position with [`Engine::set_position`] and ask for a move with [`Engine::go`].
+/// 4. Repeat step 3 for every move.
+/// 5. Call [`Engine::quit`] for graceful shutdown, or simply drop the engine.
+///
+/// Do not spawn a new engine for every move. UCI engines are stateful sessions; the process
+/// and handshake are the expensive part.
+///
+/// Dropping the engine kills and reaps the child process, so dropping is a safe fallback even
+/// if [`Engine::quit`] is not called.
+///
+/// # Example
+/// ```rust,no_run
+/// # use std::borrow::Cow;
+/// # use std::process::Command;
+/// # use suci::{Engine, Go, Position};
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Spawns the process and performs the UCI handshake.
+/// let mut engine = Engine::spawn(Command::new("stockfish"))?;
+///
+/// println!("ID: {:?}", engine.id());
+///
+/// engine.new_game()?;
+/// engine.wait_until_ready()?;
+///
+/// engine.set_position(&Position::StartPos {
+///     moves: Cow::Borrowed(&[]),
+/// })?;
+///
+/// let best_move = engine.go(&Go {
+///     depth: Some(12),
+///     ..Default::default()
+/// })?;
+/// println!("best move: {best_move:?}");
+///
+/// // Ask the engine to exit and wait for it. Dropping would also clean it up.
+/// engine.quit()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Strict parsing
+/// UCI engines do not always follow the protocol completely. By default, an unparseable line
+/// makes [`Engine::go`] and [`Engine::wait_until_ready`] return an error. Disabling strict mode
+/// with [`Engine::set_strict`] skips such lines instead. If the skipped line was required for the
+/// current command, the call can then wait indefinitely for a response that never arrives.
 #[derive(Debug)]
 pub struct Engine {
-    child: Option<Child>,
+    child: Child,
     stream: EngineStream<BufReader<ChildStdout>, ChildStdin>,
     info: UciInfo,
 }
@@ -27,15 +73,96 @@ pub struct Engine {
 /// The engine's UCI handshake information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct UciInfo {
+    /// The engine's identification, if it sent an `id` message during the handshake.
     pub id: Option<Id<'static>>,
+    /// The options advertised by the engine during the handshake.
     pub options: Vec<EngineOption<'static>>,
 }
 
+#[derive(Debug)]
+enum Response<'a> {
+    Id(Id<'a>),
+    BestMove(BestMove),
+    Info(Box<Info<'a>>),
+    Option(EngineOption<'a>),
+    UciOk,
+    ReadyOk,
+    Other,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum ResponseKind {
+    Id,
+    BestMove,
+    CopyProtection,
+    Registration,
+    Info,
+    Option,
+    UciOk,
+    ReadyOk,
+}
+
+impl FromStr for ResponseKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "id" => Ok(Self::Id),
+            "bestmove" => Ok(Self::BestMove),
+            "copyprotection" => Ok(Self::CopyProtection),
+            "registration" => Ok(Self::Registration),
+            "info" => Ok(Self::Info),
+            "option" => Ok(Self::Option),
+            "uciok" => Ok(Self::UciOk),
+            "readyok" => Ok(Self::ReadyOk),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromStr for Response<'_> {
+    type Err = MessageParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (kind, parts) = parsing::collect_any_message::<ResponseKind>("engine UCI message", s)?;
+
+        match kind {
+            ResponseKind::Id => Ok(Self::Id(Id::from_str_parts(parts)?)),
+            ResponseKind::BestMove => Ok(Self::BestMove(BestMove::from_str_parts(parts))),
+            ResponseKind::Info => Ok(Self::Info(Box::new(Info::from_str_parts(parts)))),
+            ResponseKind::Option => Ok(Self::Option(EngineOption::from_str_parts(parts)?)),
+            ResponseKind::UciOk => Ok(Self::UciOk),
+            ResponseKind::ReadyOk => Ok(Self::ReadyOk),
+            ResponseKind::CopyProtection | ResponseKind::Registration => Ok(Self::Other),
+        }
+    }
+}
+
 impl Engine {
-    #[allow(clippy::missing_errors_doc)]
-    /// Spawns an engine process and performs the UCI handshake.
+    /// Starts an engine process and performs the UCI handshake.
     ///
     /// The process's stdin and stdout are set to [`Stdio::piped`].
+    ///
+    /// The handshake sends `uci`, collects the engine's `id` and `option` messages, and waits
+    /// for `uciok`. The resulting data is available through [`Engine::id`] and
+    /// [`Engine::options`].
+    ///
+    /// # Errors
+    /// Returns [`EngineStartError::Spawn`] if the process cannot be started,
+    /// [`EngineStartError::Pipes`] if stdin/stdout are missing, or
+    /// [`EngineStartError::Handshake`] if the UCI handshake fails.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use std::process::Command;
+    /// # use suci::Engine;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = Engine::spawn(Command::new("stockfish"))?;
+    /// println!("ID: {:?}", engine.id());
+    /// engine.quit()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn spawn(mut command: Command) -> Result<Self, EngineStartError> {
         command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
@@ -59,7 +186,7 @@ impl Engine {
         };
 
         let mut engine = Self {
-            child: Some(child),
+            child,
             stream: EngineStream {
                 engine: BufReader::new(stdout),
                 gui: stdin,
@@ -88,6 +215,11 @@ impl Engine {
     }
 
     /// Enables or disables strict parsing of engine messages.
+    ///
+    /// Strict mode is enabled by default. When it is disabled, lines that cannot be parsed are
+    /// skipped instead of returning an error. If a skipped line was required for the current
+    /// command, the next read can wait indefinitely. Use this only for engines known to emit extra
+    /// non-UCI lines.
     pub const fn set_strict(&mut self, strict: bool) {
         self.stream.strict = strict;
     }
@@ -99,35 +231,109 @@ impl Engine {
 
     /// Sends a position to the engine.
     ///
+    /// UCI has no command for applying a single move. Send the complete position each turn:
+    /// either [`Position::StartPos`] with the move history, or [`Position::Fen`] with a FEN and
+    /// any moves played from it.
+    ///
     /// # Errors
     /// See [`Write::write_all`].
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use std::borrow::Cow;
+    /// # use suci::{Engine, Position};
+    /// # fn example(engine: &mut Engine) -> Result<(), Box<dyn std::error::Error>> {
+    /// engine.set_position(&Position::StartPos {
+    ///     moves: Cow::Borrowed(&[]),
+    /// })?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn set_position(&mut self, position: &Position<'_>) -> io::Result<()> {
         self.stream.send_message(position)
     }
 
     /// Sends an option to the engine.
     ///
+    /// Options are usually set once after [`Engine::spawn`]. Call
+    /// [`Engine::wait_until_ready`] afterward if the next command depends on the option being
+    /// applied.
+    ///
     /// # Errors
     /// See [`Write::write_all`].
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use suci::{Engine, SetOption};
+    /// # fn example(engine: &mut Engine) -> Result<(), Box<dyn std::error::Error>> {
+    /// engine.set_option(&SetOption {
+    ///     name: "Threads".into(),
+    ///     value: Some("1".into()),
+    /// })?;
+    /// engine.wait_until_ready()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn set_option(&mut self, option: &SetOption<'_>) -> io::Result<()> {
         self.stream.send_message(option)
     }
 
-    #[allow(clippy::missing_errors_doc)]
-    /// Sends [`Go`] and waits for [`BestMove`].
+    /// Sends [`Go`] and waits for the engine's [`BestMove`].
     ///
-    /// Received [`Info`](crate::Info) messages are logged at `trace`.
+    /// This call blocks until the engine sends `bestmove`. Received
+    /// [`Info`](crate::Info) messages are logged at `trace`.
+    ///
+    /// # Errors
+    /// Returns [`ReadWriteError`] if sending `go` fails or if reading the engine's response
+    /// fails.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use suci::{Engine, Go};
+    /// # fn example(engine: &mut Engine) -> Result<(), Box<dyn std::error::Error>> {
+    /// let best_move = engine.go(&Go {
+    ///     depth: Some(12),
+    ///     ..Default::default()
+    /// })?;
+    ///
+    /// if let Some(normal) = best_move.normal() {
+    ///     println!("engine played: {:?}", normal.movement);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn go(&mut self, message: &Go) -> Result<BestMove, ReadWriteError> {
         self.stream.go(message)
     }
 
-    #[allow(clippy::missing_errors_doc)]
     /// Sends `isready` and waits for `readyok`.
+    ///
+    /// This is the UCI synchronization barrier. It is useful after changing options or starting
+    /// a new game, and before a command whose result depends on earlier commands having been
+    /// processed.
+    ///
+    /// It is not required between [`Engine::set_position`] and [`Engine::go`]; UCI commands are
+    /// processed in order.
+    ///
+    /// # Errors
+    /// Returns [`ReadWriteError`] if sending or receiving fails.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use suci::Engine;
+    /// # fn example(engine: &mut Engine) -> Result<(), Box<dyn std::error::Error>> {
+    /// engine.new_game()?;
+    /// engine.wait_until_ready()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn wait_until_ready(&mut self) -> Result<(), ReadWriteError> {
         self.stream.wait_until_ready()
     }
 
     /// Tells the engine to start a new game.
+    ///
+    /// This sends `ucinewgame`. It does not reset options or the process.
     ///
     /// # Errors
     /// See [`Write::write_all`].
@@ -137,13 +343,17 @@ impl Engine {
 
     /// Tells the engine to stop calculating.
     ///
+    /// The engine should still answer the current [`Engine::go`] with `bestmove`.
+    ///
     /// # Errors
     /// See [`Write::write_all`].
     pub fn stop(&mut self) -> io::Result<()> {
         self.stream.send_command("stop")
     }
 
-    /// Tells the engine that pondering hit.
+    /// Tells the engine that the pondered move was played.
+    ///
+    /// This sends `ponderhit` and is only meaningful when `go ponder` is active.
     ///
     /// # Errors
     /// See [`Write::write_all`].
@@ -151,50 +361,48 @@ impl Engine {
         self.stream.send_command("ponderhit")
     }
 
-    /// Tells the engine to quit.
+    /// Asks the engine to exit and consumes it.
+    ///
+    /// This sends `quit` and waits for the process to exit. It returns any I/O error from sending
+    /// the command or waiting for the process. Because it consumes the engine, the engine cannot
+    /// be used after this call.
+    ///
+    /// Dropping an engine also kills and reaps the process. Use this method when you want an
+    /// explicit graceful shutdown with error reporting; otherwise, dropping is sufficient.
+    ///
+    /// This method blocks until the engine exits. An engine that ignores `quit` can make it wait
+    /// indefinitely; drop the engine instead if you need a forced shutdown.
     ///
     /// # Errors
-    /// See [`Write::write_all`].
-    pub fn quit(&mut self) -> io::Result<()> {
-        self.stream.send_command("quit")
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    /// Waits for the engine process to exit.
-    pub fn wait(&mut self) -> io::Result<ExitStatus> {
-        let Some(child) = self.child.as_mut() else {
-            return Err(io::Error::other("engine process already waited"));
-        };
-
-        debug!(target: "suci", "waiting for engine");
-        let status = child.wait()?;
-        self.child = None;
-        debug!(target: "suci", "engine stopped");
-        Ok(status)
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    /// Kills the engine process.
+    /// Returns an I/O error if sending `quit` fails or if waiting for the process fails.
     ///
-    /// The process is reaped when the engine is dropped.
-    pub fn kill(&mut self) -> io::Result<()> {
-        if let Some(child) = self.child.as_mut() {
-            debug!(target: "suci", "killing engine");
-            child.kill()?;
-        }
-
+    /// # Example
+    /// ```rust,no_run
+    /// # use suci::Engine;
+    /// # fn example(engine: Engine) -> Result<(), Box<dyn std::error::Error>> {
+    /// engine.quit()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn quit(mut self) -> io::Result<()> {
+        debug!(target: "suci", "quitting engine");
+        self.stream.send_command("quit")?;
+        self.child.wait()?;
+        debug!(target: "suci", "engine stopped");
         Ok(())
     }
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            debug!(target: "suci", "stopping engine");
-            let _ = child.kill();
-            let _ = child.wait();
-            debug!(target: "suci", "engine stopped");
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            return;
         }
+
+        debug!(target: "suci", "stopping engine");
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        debug!(target: "suci", "engine stopped");
     }
 }
 
@@ -315,9 +523,15 @@ where
         self.send_message(message).map_err(ReadWriteError::Write)?;
 
         loop {
-            if let Response::BestMove(best_move) = self.read().map_err(ReadWriteError::Read)? {
-                trace!(target: "suci", ?best_move, "go best move");
-                return Ok(best_move);
+            match self.read().map_err(ReadWriteError::Read)? {
+                Response::BestMove(best_move) => {
+                    trace!(target: "suci", ?best_move, "go best move");
+                    return Ok(best_move);
+                }
+                Response::Info(info) => {
+                    trace!(target: "suci", ?info, "go info");
+                }
+                _ => (),
             }
         }
     }

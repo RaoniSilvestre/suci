@@ -1,7 +1,7 @@
 [package]
 name = "suci"
 version = "0.1.0"
-description = "SUCI: a simple Rust UCI crate."
+description = "SUCI: Simple UCI"
 categories = ["parser-implementations", "game-development"]
 keywords = ["chess", "uci", "parser"]
 include = ["src", "README.md", "LICENSE", "NOTICE"]

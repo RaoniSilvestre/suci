@@ -1,25 +1,132 @@
-//! # A note on "GUI"
-//! Whenever you see "GUI" in the documentation, it doesn't mean "Graphical User Interface".
-//! It means "whatever controls the engine".
-//! It's called that because that's how it's referred to in the UCI protocol and elsewhere.
+//! # SUCI: Simple UCI
 //!
-//! # Example
+//! SUCI is a small, synchronous UCI engine client built on [`shakmaty`].
+//!
+//! It owns one engine process for a whole session: spawning and the UCI handshake happen once,
+//! then each move only sends a position and asks for a best move.
+//!
+//! # Quick start
 //! ```rust,no_run
-//! use std::process::Command;
-//! use suci::{Engine, Go};
-//!
+//! # use std::borrow::Cow;
+//! # use std::process::Command;
+//! # use suci::{Engine, Go, Position};
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Spawns the process and performs the UCI handshake.
 //! let mut engine = Engine::spawn(Command::new("stockfish"))?;
+//!
+//! println!("ID: {:?}", engine.id());
+//! println!("{} options", engine.options().len());
+//!
+//! // Start a new game and synchronize with the engine.
+//! engine.new_game()?;
+//! engine.wait_until_ready()?;
+//!
+//! // Send the current position and ask for a move.
+//! engine.set_position(&Position::StartPos {
+//!     moves: Cow::Borrowed(&[]),
+//! })?;
+//!
 //! let best_move = engine.go(&Go {
-//!     depth: Some(20),
+//!     depth: Some(12),
 //!     ..Default::default()
 //! })?;
+//!
+//! println!("best move: {best_move:?}");
+//!
+//! // Shut down the process. `quit` consumes the engine and waits for it to exit.
+//! engine.quit()?;
 //! # Ok(())
 //! # }
 //! ```
 //!
+//! # Session lifecycle
+//! A normal session is:
+//!
+//! 1. [`Engine::spawn`] once.
+//! 2. [`Engine::new_game`] when a game starts.
+//! 3. [`Engine::set_position`] and [`Engine::go`] for every move.
+//! 4. Call [`Engine::quit`] for graceful shutdown, or simply drop the engine.
+//!
+//! Do not spawn a new process for every move. The UCI handshake and process startup are the
+//! expensive parts. [`Engine`] owns the child process for its entire lifetime. Dropping it
+//! without calling [`Engine::quit`] still kills and reaps the process.
+//!
+//! # Positions
+//! UCI has no "apply this move" command. Each turn sends the complete position:
+//!
+//! - [`Position::StartPos`] with the moves played from the initial position.
+//! - [`Position::Fen`] with a FEN and any moves played from that FEN.
+//!
+//! Use [`Engine::set_position`] followed by [`Engine::go`].
+//!
+//! ```rust
+//! # use shakmaty::fen::Fen;
+//! # use shakmaty::uci::UciMove;
+//! # use std::borrow::Cow;
+//! # use suci::Position;
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // The starting position plus the moves played so far.
+//! let from_start = Position::StartPos {
+//!     moves: Cow::Borrowed(&[UciMove::from_ascii(b"e2e4")?]),
+//! };
+//!
+//! // The same idea expressed as a FEN plus moves played from that FEN.
+//! let fen = Fen::from_ascii(b"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")?;
+//! let from_fen = Position::Fen {
+//!     fen: Cow::Owned(fen),
+//!     moves: Cow::Borrowed(&[]),
+//! };
+//! # let _ = (from_start, from_fen);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Options and readiness
+//! Options are usually sent once after spawning:
+//!
+//! ```rust
+//! # use suci::SetOption;
+//! let option = SetOption {
+//!     name: "Threads".into(),
+//!     value: Some("1".into()),
+//! };
+//! # let _ = option;
+//! ```
+//!
+//! Call [`Engine::wait_until_ready`] after changing options or starting a new game. It is not
+//! required between [`Engine::set_position`] and [`Engine::go`]; UCI commands are processed in
+//! order.
+//!
+//! # Errors
+//! Public operations return concrete errors:
+//!
+//! - [`EngineStartError`] for spawning and the initial handshake.
+//! - [`ReadWriteError`] for sending commands and reading engine responses.
+//! - [`ReadError`] when reading or parsing an engine response fails.
+//!
+//! # Logging
+//! SUCI uses [`tracing`](https://crates.io/crates/tracing) but does not install a subscriber.
+//!
+//! - `debug`: engine lifecycle (spawn, handshake, shutdown).
+//! - `trace`: sent commands, received messages, and every [`Info`] message.
+//!
+//! Applications that install a subscriber can use `RUST_LOG=suci=debug` or
+//! `RUST_LOG=suci=trace`.
+//!
+//! # Examples
+//! The repository contains two runnable examples:
+//!
+//! - `examples/fen`: sends [`Position::Fen`] for each analysis.
+//! - `examples/startpos`: sends [`Position::StartPos`] with move histories.
+//!
+//! # A note on "GUI"
+//! Whenever you see "GUI" in the documentation, it doesn't mean "Graphical User Interface".
+//! It means "whatever controls the engine", as the UCI protocol calls it.
+//!
 //! # A note on `Display` impls
 //! `Display` implementations of messages do **not** include the final newline (`\n`) character.
+//!
+//! [`shakmaty`]: https://crates.io/crates/shakmaty
 
 mod engine;
 mod errors;
