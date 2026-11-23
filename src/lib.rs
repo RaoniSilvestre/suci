@@ -111,13 +111,7 @@
 //! - [`ReadError`] when reading or parsing an engine response fails.
 //!
 //! # Logging
-//! SUCI uses [`tracing`](https://crates.io/crates/tracing) but does not install a subscriber.
-//!
-//! - `debug`: engine lifecycle (spawn, handshake, shutdown).
-//! - `trace`: sent commands, received messages, and every [`Info`] message.
-//!
-//! Applications that install a subscriber can use `RUST_LOG=suci=debug` or
-//! `RUST_LOG=suci=trace`.
+//! SUCI uses [`tracing`](https://crates.io/crates/tracing) to emit log events.
 //!
 //! # Examples
 //! The repository contains two runnable examples:

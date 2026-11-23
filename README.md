@@ -104,16 +104,7 @@ Call `wait_until_ready` after changing options or starting a new game. It is not
 
 ## Logging
 
-SUCI uses [`tracing`](https://crates.io/crates/tracing). The library does not install a
-subscriber.
-
-Applications that install a subscriber can use:
-
-- `RUST_LOG=suci=debug` for engine lifecycle events.
-- `RUST_LOG=suci=trace` for sent commands, received messages, and every `Info` message.
-- `RUST_LOG=trace` for trace-level output from every crate.
-
-The examples do not install a subscriber.
+SUCI uses [`tracing`](https://crates.io/crates/tracing) to emit log events.
 
 ## Fork differences
 
