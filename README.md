@@ -103,7 +103,12 @@ Call `wait_until_ready` after changing options or starting a new game. It is not
 
 ## Logging
 
-SUCI uses [`tracing`](https://crates.io/crates/tracing) to emit log events.
+SUCI can emit log events through [`tracing`](https://crates.io/crates/tracing) when the
+`tracing` feature is enabled. The feature is disabled by default; enable it with:
+
+```toml
+suci = { version = "0.1", features = ["tracing"] }
+```
 
 ## Fork differences
 

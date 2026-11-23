@@ -109,7 +109,8 @@
 //! - [`ReadError`] when reading or parsing an engine response fails.
 //!
 //! # Logging
-//! SUCI uses [`tracing`](https://crates.io/crates/tracing) to emit log events.
+//! SUCI can emit log events through [`tracing`](https://crates.io/crates/tracing) when the
+//! `tracing` feature is enabled. The feature is disabled by default.
 //!
 //! # Examples
 //! The repository contains two runnable examples:
@@ -126,6 +127,8 @@
 //!
 //! [`shakmaty`]: https://crates.io/crates/shakmaty
 
+#[macro_use]
+mod logging;
 mod engine;
 mod errors;
 mod message;

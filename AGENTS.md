@@ -28,19 +28,21 @@ The example requires `stockfish` on `PATH`.
 
 - `src/engine.rs`
   - public `Engine`
-  - public `UciInfo`
+  - private `UciInfo`
   - process ownership, spawning, handshake, lifecycle (`quit`, `Drop`)
   - private `EngineStream<E, G>` used to keep protocol I/O testable
+- `src/logging.rs`
+  - private `sdebug!` and `strace!` macros
+  - expand to `tracing` calls only when the `tracing` feature is enabled
 - `src/message/`
   - public command and response types
   - private `Response` parser
   - private message/parameter keyword enums
+  - private UCI move list formatting/parsing helpers
 - `src/errors.rs`
   - concrete public error types
 - `src/parsing.rs`
   - shared parsing helpers
-- `src/uci_moves.rs`
-  - UCI move list formatting/parsing
 
 Keep the public API limited to what is actually useful. Do not reintroduce:
 
@@ -69,8 +71,9 @@ Keep the public API limited to what is actually useful. Do not reintroduce:
 
 Keep dependencies minimal.
 
-- Runtime: `shakmaty`, `tracing`
+- Runtime: `shakmaty`, optional `tracing` behind the `tracing` feature
 - Example: `shakmaty`
+- `tracing` is disabled by default; enable the `tracing` feature to emit logs.
 - No `serde`, `no_std`, async runtime, vendored engines, benchmarks, or
   compile-fail suites.
 - Do not add a dependency without a concrete use case.
@@ -94,12 +97,14 @@ MSRV is Rust 1.99, matching `rust-version` in `Cargo.toml`.
 
 ## Logging
 
-The library uses `tracing` but does not install a subscriber.
+The library optionally uses `tracing` when the `tracing` feature is enabled, but does
+not install a subscriber. When the feature is disabled, the private `sdebug!` and
+`strace!` macros expand to nothing.
 
-- `debug`: engine lifecycle
-- `trace`: UCI traffic and internal details
+- `sdebug`: engine lifecycle
+- `strace`: UCI traffic and internal details
 
-Applications may install their own subscriber and use:
+Applications may enable the feature, install their own subscriber, and use:
 
 ```text
 RUST_LOG=suci=debug

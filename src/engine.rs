@@ -6,7 +6,6 @@ use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::str::FromStr;
-use tracing::{debug, trace};
 
 /// Communicate with a chess engine.
 ///
@@ -171,7 +170,7 @@ impl Engine {
     pub fn spawn(mut command: Command) -> Result<Self, EngineStartError> {
         command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
-        debug!(target: "suci", "starting engine");
+        sdebug!("starting engine");
         let mut child = command.spawn().map_err(EngineStartError::Spawn)?;
 
         let Some(stdin) = child.stdin.take() else {
@@ -205,7 +204,7 @@ impl Engine {
             .handshake()
             .map_err(EngineStartError::Handshake)?;
 
-        debug!(target: "suci", "engine started");
+        sdebug!("engine started");
         Ok(engine)
     }
 
@@ -404,10 +403,10 @@ impl Engine {
     /// # }
     /// ```
     pub fn quit(mut self) -> io::Result<()> {
-        debug!(target: "suci", "quitting engine");
+        sdebug!("quitting engine");
         self.stream.send_command("quit")?;
         self.child.wait()?;
-        debug!(target: "suci", "engine stopped");
+        sdebug!("engine stopped");
         Ok(())
     }
 }
@@ -418,10 +417,10 @@ impl Drop for Engine {
             return;
         }
 
-        debug!(target: "suci", "stopping engine");
+        sdebug!("stopping engine");
         let _ = self.child.kill();
         let _ = self.child.wait();
-        debug!(target: "suci", "engine stopped");
+        sdebug!("engine stopped");
     }
 }
 
@@ -439,12 +438,12 @@ where
 {
     fn send_message(&mut self, message: &impl Display) -> io::Result<()> {
         let line = message.to_string();
-        trace!(target: "suci", line = %line, "sent");
+        strace!(line = %line, "sent");
         self.gui.write_all((line + "\n").as_bytes())
     }
 
     fn send_command(&mut self, command: &str) -> io::Result<()> {
-        trace!(target: "suci", command, "sent command");
+        strace!(command, "sent command");
         self.gui.write_all((command.to_string() + "\n").as_bytes())
     }
 
@@ -468,15 +467,15 @@ where
 
             match Response::from_str(&line) {
                 Ok(response) => {
-                    trace!(target: "suci", ?response, "received");
+                    strace!(?response, "received");
                     return Ok(response);
                 }
                 Err(_) if !self.strict => {
-                    trace!(target: "suci", line = %line, "ignored unrecognized line");
+                    strace!(line = %line, "ignored unrecognized line");
                     line.clear();
                 }
                 Err(error) => {
-                    trace!(target: "suci", line = %line, "failed to parse line");
+                    strace!(line = %line, "failed to parse line");
                     return Err(ReadError::Parse { error, got: line });
                 }
             }
@@ -484,7 +483,7 @@ where
     }
 
     fn handshake(&mut self) -> Result<UciInfo, ReadWriteError> {
-        trace!(target: "suci", "handshake started");
+        strace!("handshake started");
         self.send_command("uci").map_err(ReadWriteError::Write)?;
 
         let mut id: Option<Id> = None;
@@ -512,7 +511,7 @@ where
 
             match Response::from_str(&line) {
                 Ok(Response::Id(new_id)) => {
-                    trace!(target: "suci", ?new_id, "handshake id");
+                    strace!(?new_id, "handshake id");
                     id = Some(if let Some(id) = id {
                         id.updated(new_id)
                     } else {
@@ -520,35 +519,37 @@ where
                     });
                 }
                 Ok(Response::Option(option)) => {
-                    trace!(target: "suci", ?option, "handshake option");
+                    strace!(?option, "handshake option");
                     options.push(option);
                 }
                 Ok(Response::UciOk) => {
-                    trace!(target: "suci", "handshake uciok");
+                    strace!("handshake uciok");
                     return Ok(UciInfo { id, options });
                 }
+                #[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
                 Ok(response) => {
-                    trace!(target: "suci", ?response, "ignored handshake message");
+                    strace!(?response, "ignored handshake message");
                 }
                 Err(_) => {
-                    trace!(target: "suci", line = %line, "ignored handshake line");
+                    strace!(line = %line, "ignored handshake line");
                 }
             }
         }
     }
 
     fn go(&mut self, message: &Go) -> Result<BestMove, ReadWriteError> {
-        trace!(target: "suci", ?message, "go started");
+        strace!(?message, "go started");
         self.send_message(message).map_err(ReadWriteError::Write)?;
 
         loop {
             match self.read().map_err(ReadWriteError::Read)? {
                 Response::BestMove(best_move) => {
-                    trace!(target: "suci", ?best_move, "go best move");
+                    strace!(?best_move, "go best move");
                     return Ok(best_move);
                 }
+                #[cfg_attr(not(feature = "tracing"), allow(unused_variables))]
                 Response::Info(info) => {
-                    trace!(target: "suci", ?info, "go info");
+                    strace!(?info, "go info");
                 }
                 _ => (),
             }
@@ -556,7 +557,7 @@ where
     }
 
     fn wait_until_ready(&mut self) -> Result<(), ReadWriteError> {
-        trace!(target: "suci", "isready");
+        strace!("isready");
         self.send_command("isready")
             .map_err(ReadWriteError::Write)?;
 
