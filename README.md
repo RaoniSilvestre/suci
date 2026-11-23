@@ -22,7 +22,6 @@ Using this library assumes that you can launch an engine through
 library makes it easier to communicate with that process from Rust.
 
 ```rust
-use std::borrow::Cow;
 use std::process::Command;
 use suci::{Engine, Go, Position};
 
@@ -39,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Send the position and ask for a move.
     engine.set_position(&Position::StartPos {
-        moves: Cow::Borrowed(&[]),
+        moves: Vec::new(),
     })?;
 
     let best_move = engine.go(&Go {

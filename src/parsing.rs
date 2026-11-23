@@ -57,17 +57,16 @@ where
 /// - `Split<char>`: the parts that this function parses. You should return these, as is given
 ///   by the `parameter_fn` signature, unless you want to stop parsing. In that case, return `None`
 ///   and keep the parts to yourself.
-pub fn apply_parameters<'p, 'v, Parameter>(
+pub fn apply_parameters<'p, Parameter>(
     mut parts: core::str::Split<'p, char>,
-    value: &'v mut String,
+    value: &mut String,
     mut parameter_fn: impl FnMut(
         Parameter,
         Option<Parameter>,
         &str,
         core::str::Split<'p, char>,
     ) -> Option<core::str::Split<'p, char>>,
-) -> Option<&'v str>
-where
+) where
     Parameter: FromStr + Copy,
 {
     let mut first_parameter_encountered = false;
@@ -86,18 +85,19 @@ where
         }
 
         if let Some(last_parameter) = last_parameter {
-            parts = parameter_fn(last_parameter, Some(parameter), value.trim(), parts)?;
+            let Some(new_parts) =
+                parameter_fn(last_parameter, Some(parameter), value.trim(), parts)
+            else {
+                return;
+            };
+            parts = new_parts;
             value.clear();
         }
 
         last_parameter = Some(parameter);
     }
 
-    let value = value.trim();
-
     if let Some(last_parameter) = last_parameter {
-        parameter_fn(last_parameter, None, value, parts);
+        parameter_fn(last_parameter, None, value.trim(), parts);
     }
-
-    Some(value)
 }

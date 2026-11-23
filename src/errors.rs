@@ -24,12 +24,6 @@ impl Display for MessageParseError {
             MessageParseErrorKind::MissingParameters => {
                 write!(f, "missing UCI parameters, expected {expected}")
             }
-            MessageParseErrorKind::ParameterParseError => {
-                write!(f, "invalid UCI parameters, expected {expected}")
-            }
-            MessageParseErrorKind::ValueParseError => {
-                write!(f, "invalid UCI value, expected {expected}")
-            }
         }
     }
 }
@@ -43,10 +37,6 @@ pub enum MessageParseErrorKind {
     NoMessage,
     /// Required parameters are missing.
     MissingParameters,
-    /// A required parameter could not be parsed.
-    ParameterParseError,
-    /// The required value of the message could not be parsed.
-    ValueParseError,
 }
 
 /// Reading a message from the engine failed.
@@ -198,48 +188,6 @@ mod tests {
             + "missing UCI parameters, expected "
             + expected
             + ". Got: ";
-
-        assert_eq!(message_parse.expected, expected);
-        assert_eq!(read.to_string(), read_str);
-        assert_eq!(
-            ReadWriteError::Read(read).to_string(),
-            READ_WRITE_ERROR_READ_STR.to_string() + &read_str
-        );
-
-        let expected = "depth DEEP! <- `Go::from_str` wouldn't actually error given this parameter. maybe i should add a strict mode?";
-        let message_parse = MessageParseError {
-            expected,
-            kind: MessageParseErrorKind::ParameterParseError,
-        };
-        let read = ReadError::Parse {
-            error: message_parse,
-            got: " t".to_string(),
-        };
-        let read_str = READ_ERROR_PARSE_STR.to_string()
-            + "invalid UCI parameters, expected "
-            + expected
-            + ". Got:  t";
-
-        assert_eq!(message_parse.expected, expected);
-        assert_eq!(read.to_string(), read_str);
-        assert_eq!(
-            ReadWriteError::Read(read).to_string(),
-            READ_WRITE_ERROR_READ_STR.to_string() + &read_str
-        );
-
-        let expected = "later";
-        let message_parse = MessageParseError {
-            expected,
-            kind: MessageParseErrorKind::ValueParseError,
-        };
-        let read = ReadError::Parse {
-            error: message_parse,
-            got: " ".to_string(),
-        };
-        let read_str = READ_ERROR_PARSE_STR.to_string()
-            + "invalid UCI value, expected "
-            + expected
-            + ". Got:  ";
 
         assert_eq!(message_parse.expected, expected);
         assert_eq!(read.to_string(), read_str);

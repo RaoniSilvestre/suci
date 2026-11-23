@@ -98,12 +98,6 @@ pub struct NormalBestMove {
     pub ponder: Option<UciMove>,
 }
 
-impl From<NormalBestMove> for BestMove {
-    fn from(value: NormalBestMove) -> Self {
-        Self::Normal(value)
-    }
-}
-
 impl Display for BestMove {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("bestmove")?;
@@ -129,20 +123,18 @@ mod tests {
 
     #[test]
     fn to_from_str() {
-        let m: BestMove = NormalBestMove {
+        let m = BestMove::Normal(NormalBestMove {
             movement: UciMove::from_ascii(b"e2e4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
-        }
-        .into();
+        });
 
         assert_eq!(m.to_string(), "bestmove e2e4 ponder c7c5");
         assert_eq!("bestmove e2e4 ponder c7c5".parse::<BestMove>(), Ok(m));
 
-        let m: BestMove = NormalBestMove {
+        let m = BestMove::Normal(NormalBestMove {
             movement: UciMove::from_ascii(b"d2d4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
-        }
-        .into();
+        });
 
         assert_eq!(
             "bestmove oops d2d4 ponder c7c5 ignorethis".parse::<BestMove>(),
@@ -153,11 +145,10 @@ mod tests {
 
     #[test]
     fn to_from_str_bad_value() {
-        let m: BestMove = NormalBestMove {
+        let m = BestMove::Normal(NormalBestMove {
             movement: UciMove::from_ascii(b"e2e4").unwrap(),
             ponder: Some(UciMove::from_ascii(b"c7c5").unwrap()),
-        }
-        .into();
+        });
 
         assert_eq!(
             "bestmove junk e2e4 ponder c7c5\n".parse::<BestMove>(),

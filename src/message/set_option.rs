@@ -1,5 +1,4 @@
 use core::fmt::{Display, Formatter};
-use std::borrow::Cow;
 
 /// Sets a configuration option on the engine.
 ///
@@ -21,26 +20,14 @@ use std::borrow::Cow;
 ///
 /// <https://backscattering.de/chess/uci/#gui-setoption>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SetOption<'a> {
+pub struct SetOption {
     /// The option name, matching an option advertised by the engine.
-    pub name: Cow<'a, str>,
+    pub name: String,
     /// The new value, or `None` for a button-style option.
-    pub value: Option<Cow<'a, str>>,
+    pub value: Option<String>,
 }
 
-impl SetOption<'_> {
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> SetOption<'static> {
-        SetOption {
-            name: Cow::Owned(self.name.into_owned()),
-            value: self.value.map(Cow::into_owned).map(Cow::Owned),
-        }
-    }
-}
-
-impl Display for SetOption<'_> {
+impl Display for SetOption {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match &self.value {
             Some(value) => write!(f, "setoption name {} value {value}", self.name),

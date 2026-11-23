@@ -3,7 +3,6 @@ use crate::parsing;
 use core::fmt::{Display, Formatter};
 use core::str::{FromStr, Split};
 use shakmaty::uci::UciMove;
-use std::borrow::Cow;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum InfoParameter {
@@ -94,7 +93,7 @@ impl FromStr for InfoParameter {
 ///
 /// <https://backscattering.de/chess/uci/#engine-info>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Info<'a> {
+pub struct Info {
     /// The search depth and optional selective depth.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-depth>
@@ -110,7 +109,7 @@ pub struct Info<'a> {
     /// The principal variation: the line the engine expects to be best.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-pv>
-    pub pv: Cow<'a, [UciMove]>,
+    pub pv: Vec<UciMove>,
     /// The index of this line when multi-PV is enabled, starting at 1.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-multipv>
@@ -150,51 +149,10 @@ pub struct Info<'a> {
     /// Free-form text from the engine.
     ///
     /// <https://backscattering.de/chess/uci/#engine-info-string>
-    pub string: Option<Cow<'a, str>>,
+    pub string: Option<String>,
 }
 
-impl Info<'_> {
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> Info<'static> {
-        let Info {
-            depth,
-            time,
-            nodes,
-            pv,
-            multi_pv,
-            score,
-            curr_move,
-            curr_move_number,
-            hash_full,
-            nps,
-            tb_hits,
-            sb_hits,
-            cpu_load,
-            string,
-        } = self;
-
-        Info {
-            depth,
-            time,
-            nodes,
-            pv: Cow::Owned(pv.into_owned()),
-            multi_pv,
-            score,
-            curr_move,
-            curr_move_number,
-            hash_full,
-            nps,
-            tb_hits,
-            sb_hits,
-            cpu_load,
-            string: string.map(Cow::into_owned).map(Cow::Owned),
-        }
-    }
-}
-
-impl Info<'_> {
+impl Info {
     pub(crate) const NAME: &'static str = "info";
 
     pub(crate) fn from_str_parts<'p>(parts: Split<'p, char>) -> Self {
@@ -265,21 +223,21 @@ impl Info<'_> {
         let mut value = String::with_capacity(200);
         parsing::apply_parameters(parts, &mut value, parameter_fn);
 
-        info.pv = Cow::Owned(pv);
+        info.pv = pv;
 
         if let Some(depth) = depth {
             info.depth = Some(Depth { depth, seldepth });
         }
 
         if !string.is_empty() {
-            info.string = Some(Cow::Owned(string));
+            info.string = Some(string);
         }
 
         info
     }
 }
 
-impl FromStr for Info<'_> {
+impl FromStr for Info {
     type Err = MessageParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -288,7 +246,7 @@ impl FromStr for Info<'_> {
     }
 }
 
-impl Display for Info<'_> {
+impl Display for Info {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("info")?;
 
@@ -463,7 +421,6 @@ impl ScoreWithBound {
 mod tests {
     use super::{Depth, Info, Score, ScoreBound, ScoreWithBound};
     use shakmaty::uci::UciMove;
-    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {
@@ -479,7 +436,7 @@ mod tests {
             }),
             time: Some(12),
             nodes: Some(4),
-            pv: Cow::Borrowed(pv),
+            pv: pv.to_vec(),
             multi_pv: Some(1),
             score: Some(ScoreWithBound {
                 kind: Score::Centipawns(22),
@@ -492,7 +449,7 @@ mod tests {
             tb_hits: Some(2),
             sb_hits: None,
             cpu_load: None,
-            string: Some(Cow::Borrowed("blabla")),
+            string: Some("blabla".into()),
         };
 
         let s = "info depth 20 seldepth 31 time 12 nodes 4 pv e2e4 c7c5 multipv 1 score cp 22 lowerbound currmove e2e4 tbhits 2 string blabla";
@@ -510,7 +467,7 @@ mod tests {
             }),
             time: Some(12),
             nodes: Some(4),
-            pv: Cow::Borrowed(&[]),
+            pv: Vec::new(),
             multi_pv: Some(1),
             score: Some(ScoreWithBound {
                 kind: Score::Centipawns(22),
@@ -523,7 +480,7 @@ mod tests {
             tb_hits: Some(4),
             sb_hits: None,
             cpu_load: None,
-            string: Some(Cow::Borrowed("blabla")),
+            string: Some("blabla".into()),
         };
 
         assert_eq!(
@@ -543,9 +500,10 @@ mod tests {
                 depth: 13,
                 seldepth: None,
             }),
-            string: Some(Cow::Borrowed(
-                "the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound",
-            )),
+            string: Some(
+                "the parameters in this string should be ignored! depth 20 (psych) time 2 nodes 4 score cp 22 lowerbound"
+                    .into(),
+            ),
             ..Default::default()
         };
 

@@ -1,7 +1,6 @@
 use core::fmt::{Display, Formatter};
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
-use std::borrow::Cow;
 
 /// Changes the position to analyze.
 ///
@@ -12,19 +11,18 @@ use std::borrow::Cow;
 /// # Example
 /// ```rust
 /// use shakmaty::fen::Fen;
-/// use std::borrow::Cow;
 /// use suci::Position;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let start = Position::StartPos {
-///     moves: Cow::Borrowed(&[]),
+///     moves: Vec::new(),
 /// };
 /// assert_eq!(start.to_string(), "position startpos");
 ///
 /// let fen = Fen::from_ascii(b"4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")?;
 /// let position = Position::Fen {
-///     fen: Cow::Owned(fen),
-///     moves: Cow::Borrowed(&[]),
+///     fen,
+///     moves: Vec::new(),
 /// };
 /// assert!(position.to_string().starts_with("position fen 4k3/8/8/8/8/8/4P3/4K3"));
 /// # Ok(())
@@ -33,40 +31,23 @@ use std::borrow::Cow;
 ///
 /// <https://backscattering.de/chess/uci/#gui-position>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Position<'a> {
+pub enum Position {
     /// The initial chess position, followed by a list of moves.
     StartPos {
         /// Moves played from the initial position, in UCI long algebraic notation such as
         /// `e2e4`.
-        moves: Cow<'a, [UciMove]>,
+        moves: Vec<UciMove>,
     },
     /// A position given as a FEN, followed by a list of moves.
     Fen {
         /// The position from which `moves` starts.
-        fen: Cow<'a, Fen>,
+        fen: Fen,
         /// Moves played from `fen`, in UCI long algebraic notation such as `e2e4`.
-        moves: Cow<'a, [UciMove]>,
+        moves: Vec<UciMove>,
     },
 }
 
-impl Position<'_> {
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> Position<'static> {
-        match self {
-            Self::StartPos { moves } => Position::StartPos {
-                moves: Cow::Owned(moves.into_owned()),
-            },
-            Self::Fen { fen, moves } => Position::Fen {
-                fen: Cow::Owned(fen.into_owned()),
-                moves: Cow::Owned(moves.into_owned()),
-            },
-        }
-    }
-}
-
-impl Display for Position<'_> {
+impl Display for Position {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("position")?;
 

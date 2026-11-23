@@ -2,7 +2,6 @@ use crate::errors::MessageParseError;
 use crate::{MessageParseErrorKind, parsing};
 use core::fmt::{Display, Formatter};
 use core::str::{FromStr, Split};
-use std::borrow::Cow;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum IdParameter {
@@ -48,40 +47,26 @@ impl FromStr for IdParameter {
 ///
 /// <https://backscattering.de/chess/uci/#engine-id>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Id<'a> {
+pub enum Id {
     /// The engine's name.
     ///
     /// <https://backscattering.de/chess/uci/#engine-id-name>
-    Name(Cow<'a, str>),
+    Name(String),
     /// The engine's author.
     ///
     /// <https://backscattering.de/chess/uci/#engine-id-author>
-    Author(Cow<'a, str>),
+    Author(String),
     /// Both the engine's name and author.
     NameAndAuthor {
         /// The engine's name.
-        name: Cow<'a, str>,
+        name: String,
         /// The engine's author.
-        author: Cow<'a, str>,
+        author: String,
     },
 }
 
-impl Id<'_> {
+impl Id {
     pub(crate) const NAME: &'static str = "id";
-
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> Id<'static> {
-        match self {
-            Self::Name(name) => Id::Name(Cow::Owned(name.into_owned())),
-            Self::Author(author) => Id::Author(Cow::Owned(author.into_owned())),
-            Self::NameAndAuthor { name, author } => Id::NameAndAuthor {
-                name: Cow::Owned(name.into_owned()),
-                author: Cow::Owned(author.into_owned()),
-            },
-        }
-    }
 
     #[must_use]
     /// Returns a new [`Id`] that is updated with values of the `new` parameter.
@@ -123,15 +108,15 @@ impl Id<'_> {
     /// ```
     pub fn updated(self, new: Self) -> Self {
         match (self, new) {
-            (Id::Author(_), Id::Author(author)) => Id::Author(author),
-            (Id::Name(_), Id::Name(name)) => Id::Name(name),
+            (Self::Author(_), Self::Author(author)) => Self::Author(author),
+            (Self::Name(_), Self::Name(name)) => Self::Name(name),
             (
-                Id::NameAndAuthor { .. } | Id::Author(_) | Id::Name(_),
-                Id::NameAndAuthor { name, author },
+                Self::NameAndAuthor { .. } | Self::Author(_) | Self::Name(_),
+                Self::NameAndAuthor { name, author },
             )
-            | (Id::NameAndAuthor { author: _, name } | Id::Name(name), Id::Author(author))
-            | (Id::NameAndAuthor { author, name: _ } | Id::Author(author), Id::Name(name)) => {
-                Id::NameAndAuthor { name, author }
+            | (Self::NameAndAuthor { author: _, name } | Self::Name(name), Self::Author(author))
+            | (Self::NameAndAuthor { author, name: _ } | Self::Author(author), Self::Name(name)) => {
+                Self::NameAndAuthor { name, author }
             }
         }
     }
@@ -152,12 +137,9 @@ impl Id<'_> {
         parsing::apply_parameters(parts, &mut value, parameter_fn);
 
         match (name, author) {
-            (Some(name), Some(author)) => Ok(Self::NameAndAuthor {
-                name: Cow::Owned(name),
-                author: Cow::Owned(author),
-            }),
-            (Some(name), None) => Ok(Self::Name(Cow::Owned(name))),
-            (None, Some(author)) => Ok(Self::Author(Cow::Owned(author))),
+            (Some(name), Some(author)) => Ok(Self::NameAndAuthor { name, author }),
+            (Some(name), None) => Ok(Self::Name(name)),
+            (None, Some(author)) => Ok(Self::Author(author)),
             (None, None) => Err(MessageParseError {
                 expected: "name or author",
                 kind: MessageParseErrorKind::MissingParameters,
@@ -166,7 +148,7 @@ impl Id<'_> {
     }
 }
 
-impl FromStr for Id<'_> {
+impl FromStr for Id {
     type Err = MessageParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -175,7 +157,7 @@ impl FromStr for Id<'_> {
     }
 }
 
-impl Display for Id<'_> {
+impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("id ")?;
 
@@ -194,13 +176,12 @@ impl Display for Id<'_> {
 #[cfg(test)]
 mod tests {
     use super::Id;
-    use std::borrow::Cow;
 
     #[test]
     fn to_from_str() {
         let m = Id::NameAndAuthor {
-            name: Cow::from("Stockfish 16.1"),
-            author: Cow::from("The stockfish developers"),
+            name: "Stockfish 16.1".into(),
+            author: "The stockfish developers".into(),
         };
 
         assert_eq!(
@@ -212,7 +193,7 @@ mod tests {
             Ok(m)
         );
 
-        let m = Id::Name(Cow::from("Stockfish 16.1"));
+        let m = Id::Name("Stockfish 16.1".into());
 
         assert_eq!(
             "id name Stockfish 16.1 \n ignored".parse::<Id>(),

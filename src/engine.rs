@@ -32,7 +32,6 @@ use tracing::{debug, trace};
 ///
 /// # Example
 /// ```rust,no_run
-/// # use std::borrow::Cow;
 /// # use std::process::Command;
 /// # use suci::{Engine, Go, Position};
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,7 +44,7 @@ use tracing::{debug, trace};
 /// engine.wait_until_ready()?;
 ///
 /// engine.set_position(&Position::StartPos {
-///     moves: Cow::Borrowed(&[]),
+///     moves: Vec::new(),
 /// })?;
 ///
 /// let best_move = engine.go(&Go {
@@ -75,20 +74,20 @@ pub struct Engine {
 /// The engine's UCI handshake information.
 ///
 /// <https://backscattering.de/chess/uci/#gui-uci>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct UciInfo {
+#[derive(Debug, Default)]
+struct UciInfo {
     /// The engine's identification, if it sent an `id` message during the handshake.
-    pub id: Option<Id<'static>>,
+    id: Option<Id>,
     /// The options advertised by the engine during the handshake.
-    pub options: Vec<EngineOption<'static>>,
+    options: Vec<EngineOption>,
 }
 
 #[derive(Debug)]
-enum Response<'a> {
-    Id(Id<'a>),
+enum Response {
+    Id(Id),
     BestMove(BestMove),
-    Info(Box<Info<'a>>),
-    Option(EngineOption<'a>),
+    Info(Box<Info>),
+    Option(EngineOption),
     UciOk,
     ReadyOk,
     Other,
@@ -124,7 +123,7 @@ impl FromStr for ResponseKind {
     }
 }
 
-impl FromStr for Response<'_> {
+impl FromStr for Response {
     type Err = MessageParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -213,14 +212,14 @@ impl Engine {
     /// The engine's identification, if it sent one during the handshake.
     ///
     /// <https://backscattering.de/chess/uci/#engine-id>
-    pub const fn id(&self) -> Option<&Id<'static>> {
+    pub const fn id(&self) -> Option<&Id> {
         self.info.id.as_ref()
     }
 
     /// The engine's advertised options from the handshake.
     ///
     /// <https://backscattering.de/chess/uci/#engine-option>
-    pub const fn options(&self) -> &[EngineOption<'static>] {
+    pub const fn options(&self) -> &[EngineOption] {
         self.info.options.as_slice()
     }
 
@@ -232,11 +231,6 @@ impl Engine {
     /// non-UCI lines.
     pub const fn set_strict(&mut self, strict: bool) {
         self.stream.strict = strict;
-    }
-
-    /// Whether strict parsing is enabled.
-    pub const fn strict(&self) -> bool {
-        self.stream.strict
     }
 
     /// Sends a position to the engine.
@@ -252,16 +246,15 @@ impl Engine {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # use std::borrow::Cow;
     /// # use suci::{Engine, Position};
     /// # fn example(engine: &mut Engine) -> Result<(), Box<dyn std::error::Error>> {
     /// engine.set_position(&Position::StartPos {
-    ///     moves: Cow::Borrowed(&[]),
+    ///     moves: Vec::new(),
     /// })?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn set_position(&mut self, position: &Position<'_>) -> io::Result<()> {
+    pub fn set_position(&mut self, position: &Position) -> io::Result<()> {
         self.stream.send_message(position)
     }
 
@@ -288,7 +281,7 @@ impl Engine {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn set_option(&mut self, option: &SetOption<'_>) -> io::Result<()> {
+    pub fn set_option(&mut self, option: &SetOption) -> io::Result<()> {
         self.stream.send_message(option)
     }
 
@@ -455,7 +448,7 @@ where
         self.gui.write_all((command.to_string() + "\n").as_bytes())
     }
 
-    fn read(&mut self) -> Result<Response<'static>, ReadError> {
+    fn read(&mut self) -> Result<Response, ReadError> {
         let mut line = String::with_capacity(100);
 
         loop {
@@ -494,8 +487,8 @@ where
         trace!(target: "suci", "handshake started");
         self.send_command("uci").map_err(ReadWriteError::Write)?;
 
-        let mut id: Option<Id<'static>> = None;
-        let mut options: Vec<EngineOption<'static>> = Vec::new();
+        let mut id: Option<Id> = None;
+        let mut options: Vec<EngineOption> = Vec::new();
         let mut line = String::with_capacity(100);
 
         loop {
@@ -584,7 +577,6 @@ mod tests {
     use crate::errors::MessageParseError;
     use crate::{EngineOption, EngineOptionType, Id, MessageParseErrorKind, NormalBestMove};
     use shakmaty::uci::UciMove;
-    use std::borrow::Cow;
 
     fn input_engine(input: &[u8]) -> EngineStream<&[u8], Vec<u8>> {
         EngineStream {
@@ -623,9 +615,9 @@ mod tests {
         assert_eq!(
             info.options,
             vec![EngineOption {
-                name: Cow::Borrowed("Horsey range"),
+                name: "Horsey range".into(),
                 option_type: EngineOptionType::String {
-                    default: Some(Cow::Borrowed("the biggest!!"))
+                    default: Some("the biggest!!".into())
                 }
             }]
         );
@@ -709,7 +701,7 @@ mod tests {
         assert_eq!(
             info.options,
             vec![EngineOption {
-                name: Cow::Borrowed("Hash"),
+                name: "Hash".into(),
                 option_type: EngineOptionType::Spin {
                     default: Some(16),
                     min: Some(1),

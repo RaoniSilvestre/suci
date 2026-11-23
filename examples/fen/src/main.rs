@@ -3,7 +3,6 @@
 //! Run with `cargo run -p fen`. Requires that you have installed Stockfish.
 
 use shakmaty::fen::Fen;
-use std::borrow::Cow;
 use std::process::Command;
 use suci::{Engine, Go, Position};
 
@@ -22,11 +21,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. The starting position as a complete FEN.
     println!("== Starting position");
     engine.set_position(&Position::Fen {
-        fen: Cow::Owned(Fen::from_ascii(
-            b"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        )?),
+        fen: Fen::from_ascii(b"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")?,
         // No moves have been played from this FEN.
-        moves: Cow::Borrowed(&[]),
+        moves: Vec::new(),
     })?;
 
     // Optional barrier: UCI processes commands in order, but this makes the
@@ -43,10 +40,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. The same engine process is reused; the position after 1. e4 is sent as a FEN.
     println!("== After 1. e4");
     engine.set_position(&Position::Fen {
-        fen: Cow::Owned(Fen::from_ascii(
-            b"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
-        )?),
-        moves: Cow::Borrowed(&[]),
+        fen: Fen::from_ascii(b"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")?,
+        moves: Vec::new(),
     })?;
     engine.wait_until_ready()?;
 
@@ -59,10 +54,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. The position after 1. e4 e5, again as a complete FEN.
     println!("== After 1. e4 e5");
     engine.set_position(&Position::Fen {
-        fen: Cow::Owned(Fen::from_ascii(
-            b"rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
-        )?),
-        moves: Cow::Borrowed(&[]),
+        fen: Fen::from_ascii(b"rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")?,
+        moves: Vec::new(),
     })?;
     engine.wait_until_ready()?;
 

@@ -1,7 +1,6 @@
 use core::fmt::{Display, Formatter};
 use core::num::NonZeroUsize;
 use shakmaty::uci::UciMove;
-use std::borrow::Cow;
 
 /// Tells the engine to start calculating.
 ///
@@ -24,13 +23,13 @@ use std::borrow::Cow;
 ///
 /// <https://backscattering.de/chess/uci/#gui-go>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Go<'a> {
+pub struct Go {
     /// Restricts the root search to these moves.
     ///
     /// Leave it empty to let the engine search all legal moves.
     ///
     /// <https://backscattering.de/chess/uci/#gui-go-searchmoves>
-    pub search_moves: Cow<'a, [UciMove]>,
+    pub search_moves: Vec<UciMove>,
     /// Starts a pondering search.
     ///
     /// The engine keeps searching after the expected move and does not send `bestmove` until it
@@ -80,44 +79,7 @@ pub struct Go<'a> {
     pub infinite: bool,
 }
 
-impl Go<'_> {
-    /// Calls [`Cow::into_owned`] on each [`Cow`] field.
-    /// The resulting value has a `'static` lifetime.
-    #[must_use]
-    pub fn into_owned(self) -> Go<'static> {
-        let Go {
-            search_moves,
-            ponder,
-            w_time,
-            b_time,
-            w_inc,
-            b_inc,
-            moves_to_go,
-            depth,
-            nodes,
-            mate,
-            move_time,
-            infinite,
-        } = self;
-
-        Go {
-            search_moves: Cow::Owned(search_moves.into_owned()),
-            ponder,
-            w_time,
-            b_time,
-            w_inc,
-            b_inc,
-            moves_to_go,
-            depth,
-            nodes,
-            mate,
-            move_time,
-            infinite,
-        }
-    }
-}
-
-impl Display for Go<'_> {
+impl Display for Go {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.write_str("go")?;
 

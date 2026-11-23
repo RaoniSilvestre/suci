@@ -1,7 +1,3 @@
-// The public message types are named after their UCI keywords, even when that
-// matches the module name.
-#![allow(clippy::module_name_repetitions)]
-
 mod best_move;
 mod go;
 mod id;
@@ -18,12 +14,11 @@ pub use option::*;
 pub use position::*;
 pub use set_option::*;
 use shakmaty::uci::UciMove;
-
 use std::fmt::{Display, Formatter, Write};
 
 /// Separates the string by spaces and parses moves while it can.
 /// When it encounters an unparseable move, it stops.
-pub fn parse_moves(s: &str) -> Vec<UciMove> {
+fn parse_moves(s: &str) -> Vec<UciMove> {
     s.split(' ').map_while(|part| part.parse().ok()).collect()
 }
 
@@ -31,7 +26,7 @@ pub fn parse_moves(s: &str) -> Vec<UciMove> {
 ///
 /// # Errors
 /// Returns [`core::fmt::Error`] if the formatter fails.
-pub fn format_moves(this: &[UciMove], f: &mut Formatter<'_>) -> core::fmt::Result {
+fn format_moves(this: &[UciMove], f: &mut Formatter<'_>) -> core::fmt::Result {
     let Some((first, rest)) = this.split_first() else {
         return Ok(());
     };

@@ -13,7 +13,6 @@
 //!
 //! # Quick start
 //! ```rust,no_run
-//! # use std::borrow::Cow;
 //! # use std::process::Command;
 //! # use suci::{Engine, Go, Position};
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +28,7 @@
 //!
 //! // Send the current position and ask for a move.
 //! engine.set_position(&Position::StartPos {
-//!     moves: Cow::Borrowed(&[]),
+//!     moves: Vec::new(),
 //! })?;
 //!
 //! let best_move = engine.go(&Go {
@@ -68,19 +67,18 @@
 //! ```rust
 //! # use shakmaty::fen::Fen;
 //! # use shakmaty::uci::UciMove;
-//! # use std::borrow::Cow;
 //! # use suci::Position;
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // The starting position plus the moves played so far.
 //! let from_start = Position::StartPos {
-//!     moves: Cow::Borrowed(&[UciMove::from_ascii(b"e2e4")?]),
+//!     moves: vec![UciMove::from_ascii(b"e2e4")?],
 //! };
 //!
 //! // The same idea expressed as a FEN plus moves played from that FEN.
 //! let fen = Fen::from_ascii(b"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")?;
 //! let from_fen = Position::Fen {
-//!     fen: Cow::Owned(fen),
-//!     moves: Cow::Borrowed(&[]),
+//!     fen,
+//!     moves: Vec::new(),
 //! };
 //! # let _ = (from_start, from_fen);
 //! # Ok(())
