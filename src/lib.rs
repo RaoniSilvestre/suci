@@ -5,6 +5,12 @@
 //! It owns one engine process for a whole session: spawning and the UCI handshake happen once,
 //! then each move only sends a position and asks for a best move.
 //!
+//! # UCI reference
+//! The public API maps directly to the [UCI protocol](https://backscattering.de/chess/uci):
+//!
+//! - [GUI to engine commands](https://backscattering.de/chess/uci/#gui)
+//! - [Engine to GUI responses](https://backscattering.de/chess/uci/#engine)
+//!
 //! # Quick start
 //! ```rust,no_run
 //! # use std::borrow::Cow;

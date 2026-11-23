@@ -62,8 +62,12 @@ impl FromStr for OptionParameter {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EngineOption<'a> {
     /// The option name, as used by [`SetOption`](crate::SetOption).
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-option-name>
     pub name: Cow<'a, str>,
     /// The option type and its default, range, or allowed values.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-option-type>
     pub option_type: EngineOptionType<'a>,
 }
 

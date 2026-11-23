@@ -87,6 +87,8 @@ MSRV is Rust 1.99, matching `rust-version` in `Cargo.toml`.
 - File names should match their primary type. Put the most relevant type first.
 - Prefer concrete types and explicit code over generic machinery.
 - Public items need documentation; private implementation details do not.
+- Public types and methods that directly represent a UCI command or response
+  should link to the relevant `backscattering.de/chess/uci` anchor.
 - Errors must implement `Display` and `std::error::Error`.
 
 ## Logging

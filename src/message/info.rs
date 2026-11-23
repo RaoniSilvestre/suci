@@ -409,7 +409,7 @@ pub enum ScoreBound {
 pub enum Score {
     /// A score in centipawns, where 100 is roughly one pawn.
     ///
-    /// <https://backscattering.de/chess/uci/#engine-info-score-centipawns>
+    /// <https://backscattering.de/chess/uci/#engine-info-score-cp>
     Centipawns(isize),
     /// A forced mate in this many moves.
     ///

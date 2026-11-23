@@ -28,6 +28,8 @@ use tracing::{debug, trace};
 /// Dropping the engine kills and reaps the child process, so dropping is a safe fallback even
 /// if [`Engine::quit`] is not called.
 ///
+/// <https://backscattering.de/chess/uci/#gui>
+///
 /// # Example
 /// ```rust,no_run
 /// # use std::borrow::Cow;
@@ -71,6 +73,8 @@ pub struct Engine {
 }
 
 /// The engine's UCI handshake information.
+///
+/// <https://backscattering.de/chess/uci/#gui-uci>
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct UciInfo {
     /// The engine's identification, if it sent an `id` message during the handshake.
@@ -147,6 +151,8 @@ impl Engine {
     /// for `uciok`. The resulting data is available through [`Engine::id`] and
     /// [`Engine::options`].
     ///
+    /// <https://backscattering.de/chess/uci/#gui-uci>
+    ///
     /// # Errors
     /// Returns [`EngineStartError::Spawn`] if the process cannot be started,
     /// [`EngineStartError::Pipes`] if stdin/stdout are missing, or
@@ -205,11 +211,15 @@ impl Engine {
     }
 
     /// The engine's identification, if it sent one during the handshake.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-id>
     pub const fn id(&self) -> Option<&Id<'static>> {
         self.info.id.as_ref()
     }
 
     /// The engine's advertised options from the handshake.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-option>
     pub const fn options(&self) -> &[EngineOption<'static>] {
         self.info.options.as_slice()
     }
@@ -235,6 +245,8 @@ impl Engine {
     /// either [`Position::StartPos`] with the move history, or [`Position::Fen`] with a FEN and
     /// any moves played from it.
     ///
+    /// <https://backscattering.de/chess/uci/#gui-position>
+    ///
     /// # Errors
     /// See [`Write::write_all`].
     ///
@@ -259,6 +271,8 @@ impl Engine {
     /// [`Engine::wait_until_ready`] afterward if the next command depends on the option being
     /// applied.
     ///
+    /// <https://backscattering.de/chess/uci/#gui-setoption>
+    ///
     /// # Errors
     /// See [`Write::write_all`].
     ///
@@ -282,6 +296,8 @@ impl Engine {
     ///
     /// This call blocks until the engine sends `bestmove`. Received
     /// [`Info`](crate::Info) messages are logged at `trace`.
+    ///
+    /// <https://backscattering.de/chess/uci/#gui-go>
     ///
     /// # Errors
     /// Returns [`ReadWriteError`] if sending `go` fails or if reading the engine's response
@@ -315,6 +331,8 @@ impl Engine {
     /// It is not required between [`Engine::set_position`] and [`Engine::go`]; UCI commands are
     /// processed in order.
     ///
+    /// <https://backscattering.de/chess/uci/#gui-isready>
+    ///
     /// # Errors
     /// Returns [`ReadWriteError`] if sending or receiving fails.
     ///
@@ -335,6 +353,8 @@ impl Engine {
     ///
     /// This sends `ucinewgame`. It does not reset options or the process.
     ///
+    /// <https://backscattering.de/chess/uci/#gui-ucinewgame>
+    ///
     /// # Errors
     /// See [`Write::write_all`].
     pub fn new_game(&mut self) -> io::Result<()> {
@@ -345,6 +365,8 @@ impl Engine {
     ///
     /// The engine should still answer the current [`Engine::go`] with `bestmove`.
     ///
+    /// <https://backscattering.de/chess/uci/#gui-stop>
+    ///
     /// # Errors
     /// See [`Write::write_all`].
     pub fn stop(&mut self) -> io::Result<()> {
@@ -354,6 +376,8 @@ impl Engine {
     /// Tells the engine that the pondered move was played.
     ///
     /// This sends `ponderhit` and is only meaningful when `go ponder` is active.
+    ///
+    /// <https://backscattering.de/chess/uci/#gui-ponderhit>
     ///
     /// # Errors
     /// See [`Write::write_all`].
@@ -372,6 +396,8 @@ impl Engine {
     ///
     /// This method blocks until the engine exits. An engine that ignores `quit` can make it wait
     /// indefinitely; drop the engine instead if you need a forced shutdown.
+    ///
+    /// <https://backscattering.de/chess/uci/#gui-quit>
     ///
     /// # Errors
     /// Returns an I/O error if sending `quit` fails or if waiting for the process fails.

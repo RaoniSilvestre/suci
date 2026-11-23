@@ -31,6 +31,8 @@ pub enum BestMove {
     /// `bestmove 0000`. This variant records that the `bestmove` line was received even though
     /// the move was not understood.
     ///
+    /// <https://backscattering.de/chess/uci/#move-null>
+    ///
     /// The protocol does not define this case. Its [`Display`] implementation is just
     /// `"bestmove"`.
     Other,
@@ -87,8 +89,12 @@ impl FromStr for BestMove {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NormalBestMove {
     /// The move chosen by the engine.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-bestmove>
     pub movement: UciMove,
     /// The move the engine suggests pondering, if provided.
+    ///
+    /// <https://backscattering.de/chess/uci/#engine-bestmove-ponder>
     pub ponder: Option<UciMove>,
 }
 
