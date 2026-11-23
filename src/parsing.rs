@@ -49,55 +49,40 @@ where
     Ok((message, parts))
 }
 
-/// Applies a closure to all parameters and their values.
+/// Calls `parameter_fn` for every recognized parameter and its value.
 ///
-/// `parameter_fn` accepts these parameters:
-/// - `Parameter`: the parameter kind associated with the passed in value.
-/// - `Option<Parameter>`: the next parameter, if there is one.
-/// - `Split<char>`: the parts that this function parses. You should return these, as is given
-///   by the `parameter_fn` signature, unless you want to stop parsing. In that case, return `None`
-///   and keep the parts to yourself.
-pub fn apply_parameters<'p, Parameter>(
-    mut parts: core::str::Split<'p, char>,
-    value: &mut String,
-    mut parameter_fn: impl FnMut(
-        Parameter,
-        Option<Parameter>,
-        &str,
-        core::str::Split<'p, char>,
-    ) -> Option<core::str::Split<'p, char>>,
+/// A value is the run of unrecognized tokens up to the next recognized parameter,
+/// with surrounding whitespace removed. Tokens before the first recognized
+/// parameter are ignored.
+pub fn for_each_parameter<'p, Parameter>(
+    parts: impl Iterator<Item = &'p str>,
+    mut parameter_fn: impl FnMut(Parameter, &str),
 ) where
     Parameter: FromStr + Copy,
 {
-    let mut first_parameter_encountered = false;
+    let mut value = String::with_capacity(200);
     let mut last_parameter = None;
 
-    while let Some(part) = parts.next() {
-        let Ok(parameter) = Parameter::from_str(part) else {
-            value.push_str(part);
-            value.push(' ');
-            continue;
-        };
+    for part in parts {
+        match Parameter::from_str(part) {
+            Ok(parameter) => {
+                if let Some(last_parameter) = last_parameter {
+                    parameter_fn(last_parameter, value.trim());
+                    value.clear();
+                }
 
-        if !first_parameter_encountered {
-            first_parameter_encountered = true;
-            value.clear();
+                last_parameter = Some(parameter);
+            }
+            Err(_) => {
+                if last_parameter.is_some() {
+                    value.push_str(part);
+                    value.push(' ');
+                }
+            }
         }
-
-        if let Some(last_parameter) = last_parameter {
-            let Some(new_parts) =
-                parameter_fn(last_parameter, Some(parameter), value.trim(), parts)
-            else {
-                return;
-            };
-            parts = new_parts;
-            value.clear();
-        }
-
-        last_parameter = Some(parameter);
     }
 
     if let Some(last_parameter) = last_parameter {
-        parameter_fn(last_parameter, None, value.trim(), parts);
+        parameter_fn(last_parameter, value.trim());
     }
 }

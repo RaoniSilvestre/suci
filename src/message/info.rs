@@ -20,30 +20,6 @@ enum InfoParameter {
     TbHits,
     SbHits,
     CpuLoad,
-    String,
-}
-
-impl InfoParameter {
-    /// The string representation of the parameter, surrounded by spaces.
-    const fn as_str_spaced(self) -> &'static str {
-        match self {
-            Self::Depth => " depth ",
-            Self::SelDepth => " seldepth ",
-            Self::Time => " time ",
-            Self::Nodes => " nodes ",
-            Self::Pv => " pv ",
-            Self::MultiPv => " multipv ",
-            Self::Score => " score ",
-            Self::CurrMove => " currmove ",
-            Self::CurrMoveNumber => " currmovenumber ",
-            Self::HashFull => " hashfull ",
-            Self::Nps => " nps ",
-            Self::TbHits => " tbhits ",
-            Self::SbHits => " sbhits ",
-            Self::CpuLoad => " cpuload ",
-            Self::String => " string ",
-        }
-    }
 }
 
 impl FromStr for InfoParameter {
@@ -65,7 +41,6 @@ impl FromStr for InfoParameter {
             "tbhits" => Ok(Self::TbHits),
             "sbhits" => Ok(Self::SbHits),
             "cpuload" => Ok(Self::CpuLoad),
-            "string" => Ok(Self::String),
             _ => Err(()),
         }
     }
@@ -155,73 +130,59 @@ pub struct Info {
 impl Info {
     pub(crate) const NAME: &'static str = "info";
 
-    pub(crate) fn from_str_parts<'p>(parts: Split<'p, char>) -> Self {
+    pub(crate) fn from_str_parts(mut parts: Split<'_, char>) -> Self {
         let mut info = Self::default();
         // Need to handle depth like this in case the seldepth argument comes before the depth argument.
         let mut depth = None::<usize>;
         let mut seldepth = None::<usize>;
         let mut pv = Vec::new();
-        let mut string = String::new();
 
-        let parameter_fn = |parameter,
-                            next_parameter: Option<InfoParameter>,
-                            value: &str,
-                            parts: core::str::Split<'p, char>| {
-            match parameter {
-                InfoParameter::Depth => depth = value.parse().ok().or(depth),
-                InfoParameter::SelDepth => seldepth = value.parse().ok().or(seldepth),
-                InfoParameter::Time => info.time = value.parse().ok().or(info.time),
-                InfoParameter::Nodes => info.nodes = value.parse().ok().or(info.nodes),
-                InfoParameter::Pv => {
-                    let parsed = super::parse_moves(value);
+        let mut prefix = Vec::new();
+        let mut string = None::<String>;
 
-                    if !parsed.is_empty() {
-                        pv = parsed;
-                    }
+        while let Some(part) = parts.next() {
+            if part == "string" {
+                let value = parts.collect::<Vec<_>>().join(" ");
+                let value = value.trim();
+
+                if !value.is_empty() {
+                    string = Some(value.to_owned());
                 }
-                InfoParameter::MultiPv => info.multi_pv = value.parse().ok().or(info.multi_pv),
-                InfoParameter::Score => {
-                    info.score = ScoreWithBound::from_str(value).or(info.score);
-                }
-                InfoParameter::CurrMove => info.curr_move = value.parse().ok().or(info.curr_move),
-                InfoParameter::CurrMoveNumber => {
-                    info.curr_move_number = value.parse().ok().or(info.curr_move_number);
-                }
-                InfoParameter::HashFull => info.hash_full = value.parse().ok().or(info.hash_full),
-                InfoParameter::Nps => info.nps = value.parse().ok().or(info.nps),
-                InfoParameter::TbHits => info.tb_hits = value.parse().ok().or(info.tb_hits),
-                InfoParameter::SbHits => info.sb_hits = value.parse().ok().or(info.sb_hits),
-                InfoParameter::CpuLoad => info.cpu_load = value.parse().ok().or(info.cpu_load),
-                InfoParameter::String => {
-                    string = value.to_string();
-                    let size_hint = parts.size_hint();
-                    string.reserve(size_hint.1.unwrap_or(size_hint.0).saturating_mul(20));
 
-                    if let Some(next_parameter) = next_parameter {
-                        string.push_str(next_parameter.as_str_spaced());
-                    }
-
-                    let mut first = true;
-
-                    for part in parts {
-                        if first {
-                            first = false;
-                        } else {
-                            string.push(' ');
-                        }
-
-                        string.push_str(part);
-                    }
-
-                    return None;
-                }
+                break;
             }
 
-            Some(parts)
+            prefix.push(part);
+        }
+
+        let parameter_fn = |parameter, value: &str| match parameter {
+            InfoParameter::Depth => depth = value.parse().ok().or(depth),
+            InfoParameter::SelDepth => seldepth = value.parse().ok().or(seldepth),
+            InfoParameter::Time => info.time = value.parse().ok().or(info.time),
+            InfoParameter::Nodes => info.nodes = value.parse().ok().or(info.nodes),
+            InfoParameter::Pv => {
+                let parsed = super::parse_moves(value);
+
+                if !parsed.is_empty() {
+                    pv = parsed;
+                }
+            }
+            InfoParameter::MultiPv => info.multi_pv = value.parse().ok().or(info.multi_pv),
+            InfoParameter::Score => {
+                info.score = ScoreWithBound::from_str(value).or(info.score);
+            }
+            InfoParameter::CurrMove => info.curr_move = value.parse().ok().or(info.curr_move),
+            InfoParameter::CurrMoveNumber => {
+                info.curr_move_number = value.parse().ok().or(info.curr_move_number);
+            }
+            InfoParameter::HashFull => info.hash_full = value.parse().ok().or(info.hash_full),
+            InfoParameter::Nps => info.nps = value.parse().ok().or(info.nps),
+            InfoParameter::TbHits => info.tb_hits = value.parse().ok().or(info.tb_hits),
+            InfoParameter::SbHits => info.sb_hits = value.parse().ok().or(info.sb_hits),
+            InfoParameter::CpuLoad => info.cpu_load = value.parse().ok().or(info.cpu_load),
         };
 
-        let mut value = String::with_capacity(200);
-        parsing::apply_parameters(parts, &mut value, parameter_fn);
+        parsing::for_each_parameter(prefix.into_iter(), parameter_fn);
 
         info.pv = pv;
 
@@ -229,9 +190,7 @@ impl Info {
             info.depth = Some(Depth { depth, seldepth });
         }
 
-        if !string.is_empty() {
-            info.string = Some(string);
-        }
+        info.string = string;
 
         info
     }

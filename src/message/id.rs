@@ -124,17 +124,12 @@ impl Id {
     pub(crate) fn from_str_parts(parts: Split<'_, char>) -> Result<Self, MessageParseError> {
         let mut name = None::<String>;
         let mut author = None::<String>;
-        let parameter_fn = |parameter, _, value: &str, parts| {
-            match parameter {
-                IdParameter::Name => name = Some(value.to_owned()),
-                IdParameter::Author => author = Some(value.to_owned()),
-            }
-
-            Some(parts)
+        let parameter_fn = |parameter, value: &str| match parameter {
+            IdParameter::Name => name = Some(value.to_owned()),
+            IdParameter::Author => author = Some(value.to_owned()),
         };
 
-        let mut value = String::with_capacity(200);
-        parsing::apply_parameters(parts, &mut value, parameter_fn);
+        parsing::for_each_parameter(parts, parameter_fn);
 
         match (name, author) {
             (Some(name), Some(author)) => Ok(Self::NameAndAuthor { name, author }),

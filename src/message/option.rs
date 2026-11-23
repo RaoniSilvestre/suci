@@ -80,21 +80,16 @@ impl EngineOption {
         let mut min = None::<i64>;
         let mut max = None::<i64>;
         let mut var = Vec::new();
-        let parameter_fn = |parameter, _, value: &str, parts| {
-            match parameter {
-                OptionParameter::Name => name = Some(value.to_string()),
-                OptionParameter::Type => kind = value.parse().ok().or(kind),
-                OptionParameter::Default => default = Some(value.to_string()),
-                OptionParameter::Min => min = value.parse().ok().or(min),
-                OptionParameter::Max => max = value.parse().ok().or(max),
-                OptionParameter::Var => var.push(value.to_string()),
-            }
-
-            Some(parts)
+        let parameter_fn = |parameter, value: &str| match parameter {
+            OptionParameter::Name => name = Some(value.to_string()),
+            OptionParameter::Type => kind = value.parse().ok().or(kind),
+            OptionParameter::Default => default = Some(value.to_string()),
+            OptionParameter::Min => min = value.parse().ok().or(min),
+            OptionParameter::Max => max = value.parse().ok().or(max),
+            OptionParameter::Var => var.push(value.to_string()),
         };
 
-        let mut value = String::with_capacity(200);
-        parsing::apply_parameters(parts, &mut value, parameter_fn);
+        parsing::for_each_parameter(parts, parameter_fn);
 
         let Some(name) = name else {
             return Err(MessageParseError {
